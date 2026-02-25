@@ -65,16 +65,18 @@ export default function App() {
   }
 
   return (
-    <Layout user={user} profile={profile} onSignOut={() => supabase?.auth.signOut()}>
-      <Routes>
-        <Route path="/my" element={<My />} />
-        <Route path="/team" element={<Team />} />
-        <Route path="/team/:userId" element={<TeamMember />} />
-        <Route path="/admin" element={profile?.role === 'superadmin' ? <Admin /> : <Navigate to="/" replace />} />
-        <Route path="/" element={<Navigate to={profile?.role === 'superadmin' ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
-        <Route path="/login" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      <Route
+        element={<Layout user={user} profile={profile} onSignOut={() => supabase?.auth.signOut()} />}
+      >
+        <Route path="my" element={<My />} />
+        <Route path="team" element={<Team />} />
+        <Route path="team/:userId" element={<TeamMember />} />
+        <Route path="admin" element={profile?.role === 'superadmin' ? <Admin /> : <Navigate to="/" replace />} />
+        <Route index element={<Navigate to={profile?.role === 'superadmin' ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
+      </Route>
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
