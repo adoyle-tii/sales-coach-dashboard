@@ -2,6 +2,8 @@
 
 React + Vite dashboard for sellers and managers. Uses Supabase for auth and data (RLS enforced).
 
+This app lives in its **own Git repo** (initialized in this folder) so you can push to a dedicated GitHub repo and deploy to Cloudflare Pages. See the parent project’s [docs/DASHBOARD_GITHUB_CLOUDFLARE.md](../docs/DASHBOARD_GITHUB_CLOUDFLARE.md) for creating the GitHub repo, pushing, and connecting to Cloudflare Pages.
+
 ## Setup
 
 1. Copy `.env.example` to `.env.local` and set:
