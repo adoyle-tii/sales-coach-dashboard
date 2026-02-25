@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
 
@@ -78,8 +79,10 @@ export default function My() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {assessments.map((a) => (
               <li key={a.id} style={{ padding: '12px', background: 'white', borderRadius: '6px', marginBottom: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontWeight: 600 }}>{a.meeting_title || 'Untitled meeting'}</div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                <Link to={`/my/assessment/${a.id}`} style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none' }}>
+                  {a.meeting_title || 'Untitled meeting'}
+                </Link>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '4px' }}>
                   {new Date(a.created_at).toLocaleDateString()} · {a.competency} · Avg {a.overall_score != null ? Number(a.overall_score).toFixed(1) : '—'}/5
                 </div>
               </li>
@@ -96,8 +99,10 @@ export default function My() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {sessions.map((s) => (
               <li key={s.id} style={{ padding: '12px', background: 'white', borderRadius: '6px', marginBottom: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.875rem', color: '#64748b' }}>{new Date(s.session_date).toLocaleString()}</div>
-                {s.session_summary && <p style={{ margin: '8px 0 0', fontSize: '0.9rem' }}>{s.session_summary}</p>}
+                <Link to={`/my/session/${s.id}`} style={{ fontWeight: 600, color: '#4f46e5', textDecoration: 'none' }}>
+                  {new Date(s.session_date).toLocaleString()}
+                </Link>
+                {s.session_summary && <p style={{ margin: '8px 0 0', fontSize: '0.9rem', color: '#475569' }}>{s.session_summary}</p>}
                 {s.audio_url && (
                   <audio controls src={s.audio_url} style={{ marginTop: '8px', width: '100%' }} />
                 )}
