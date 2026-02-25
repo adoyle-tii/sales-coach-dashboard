@@ -11,31 +11,41 @@ export default function My() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase?.auth.getUser() || {};
-      if (!user || !supabase) {
+      try {
+        const res = (await supabase?.auth.getUser()) || {};
+        const user = res?.data?.user;
+        if (!user || !supabase) {
+          setLoading(false);
+          return;
+        }
+        const [aRes, sRes, pRes] = await Promise.all([
+          supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
+          supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', user.id).order('session_date', { ascending: false }).limit(20),
+          supabase.from('development_plans').select('*').eq('user_id', user.id).single()
+        ]);
+        setAssessments(aRes?.data ?? []);
+        setSessions(sRes?.data ?? []);
+        setPdp(pRes?.data ?? null);
+      } catch (e) {
+        setAssessments([]);
+        setSessions([]);
+        setPdp(null);
+      } finally {
         setLoading(false);
-        return;
       }
-      const [aRes, sRes, pRes] = await Promise.all([
-        supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
-        supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', user.id).order('session_date', { ascending: false }).limit(20),
-        supabase.from('development_plans').select('*').eq('user_id', user.id).single()
-      ]);
-      setAssessments(aRes?.data || []);
-      setSessions(sRes?.data || []);
-      setPdp(pRes?.data || null);
-      setLoading(false);
     })();
   }, []);
 
-  if (loading) return <div>Loading your dashboard...</div>;
+  if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading your dashboard…</div>;
 
+  const safeScores = (a) => (a && typeof a.skill_scores === 'object' && !Array.isArray(a.skill_scores) ? a.skill_scores : {});
   const avgScores = assessments.length
     ? Object.entries(
         assessments.reduce((acc, a) => {
-          const scores = a.skill_scores || {};
+          const scores = safeScores(a);
           Object.entries(scores).forEach(([k, v]) => {
-            acc[k] = (acc[k] || []).concat(v);
+            const num = typeof v === 'number' ? v : Number(v);
+            if (!Number.isNaN(num)) acc[k] = (acc[k] || []).concat(num);
           });
           return acc;
         }, {})

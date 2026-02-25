@@ -8,24 +8,28 @@ export default function Team() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase?.auth.getUser() || {};
-      if (!user || !supabase) {
+      try {
+        const res = (await supabase?.auth.getUser()) || {};
+        const user = res?.data?.user;
+        if (!user || !supabase) {
+          setLoading(false);
+          return;
+        }
+        const profile = await supabase.from('users').select('team_id').eq('id', user.id).single();
+        const teamId = profile?.data?.team_id;
+        if (!teamId) {
+          setLoading(false);
+          return;
+        }
+        const { data } = await supabase.from('users').select('id, full_name, email, role').eq('team_id', teamId).eq('role', 'rep');
+        setMembers(data ?? []);
+      } finally {
         setLoading(false);
-        return;
       }
-      const profile = await supabase.from('users').select('team_id').eq('id', user.id).single();
-      const teamId = profile?.data?.team_id;
-      if (!teamId) {
-        setLoading(false);
-        return;
-      }
-      const { data: users } = await supabase.from('users').select('id, full_name, email, role').eq('team_id', teamId).eq('role', 'rep');
-      setMembers(users || []);
-      setLoading(false);
     })();
   }, []);
 
-  if (loading) return <div>Loading team...</div>;
+  if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading team…</div>;
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
