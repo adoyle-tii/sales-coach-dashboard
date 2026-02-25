@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useImpersonation } from '../context/ImpersonationContext';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
 export default function My() {
+  const { dataUserId } = useImpersonation();
   const [assessments, setAssessments] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [pdp, setPdp] = useState(null);
@@ -12,16 +14,14 @@ export default function My() {
   useEffect(() => {
     (async () => {
       try {
-        const res = (await supabase?.auth.getUser()) || {};
-        const user = res?.data?.user;
-        if (!user || !supabase) {
+        if (!dataUserId || !supabase) {
           setLoading(false);
           return;
         }
         const [aRes, sRes, pRes] = await Promise.all([
-          supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
-          supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', user.id).order('session_date', { ascending: false }).limit(20),
-          supabase.from('development_plans').select('*').eq('user_id', user.id).single()
+          supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', dataUserId).order('created_at', { ascending: false }).limit(50),
+          supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', dataUserId).order('session_date', { ascending: false }).limit(20),
+          supabase.from('development_plans').select('*').eq('user_id', dataUserId).single()
         ]);
         setAssessments(aRes?.data ?? []);
         setSessions(sRes?.data ?? []);
@@ -34,7 +34,7 @@ export default function My() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [dataUserId]);
 
   if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading your dashboard…</div>;
 

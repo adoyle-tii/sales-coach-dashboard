@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useImpersonation } from '../context/ImpersonationContext';
+
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
 const ROLES = [
   { value: 'rep', label: 'Rep' },
@@ -8,6 +12,8 @@ const ROLES = [
 ];
 
 export default function Admin() {
+  const navigate = useNavigate();
+  const { setImpersonatingUserId } = useImpersonation();
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,6 +22,24 @@ export default function Admin() {
   const [message, setMessage] = useState(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [promoteLoading, setPromoteLoading] = useState(false);
+
+  // Create user form
+  const [createEmail, setCreateEmail] = useState('');
+  const [createFullName, setCreateFullName] = useState('');
+  const [createRole, setCreateRole] = useState('rep');
+  const [createTeamId, setCreateTeamId] = useState('');
+  const [createUserLoading, setCreateUserLoading] = useState(false);
+
+  // Create team form
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamManagerId, setNewTeamManagerId] = useState('');
+  const [createTeamLoading, setCreateTeamLoading] = useState(false);
+
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  useEffect(() => {
+    supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id));
+  }, []);
 
   useEffect(() => {
     load();
@@ -100,6 +124,83 @@ export default function Admin() {
     setPromoteLoading(false);
   }
 
+  async function createUser() {
+    const email = createEmail.trim().toLowerCase();
+    const full_name = createFullName.trim() || email;
+    if (!email) {
+      setMessage({ type: 'error', text: 'Email is required.' });
+      return;
+    }
+    setCreateUserLoading(true);
+    setMessage(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setMessage({ type: 'error', text: 'Not signed in.' });
+        setCreateUserLoading(false);
+        return;
+      }
+      const res = await fetch(`${WORKER_URL}/admin/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email, full_name }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage({ type: 'error', text: json.error || json.message || 'Failed to create user.' });
+        setCreateUserLoading(false);
+        return;
+      }
+      const id = json.id;
+      if (createRole !== 'rep' || createTeamId) {
+        await new Promise((r) => setTimeout(r, 500));
+        const update = { updated_at: new Date().toISOString() };
+        if (createRole !== 'rep') update.role = createRole;
+        if (createTeamId) update.team_id = createTeamId;
+        const { error: updateErr } = await supabase.from('users').update(update).eq('id', id);
+        if (updateErr) setMessage({ type: 'info', text: `User created. Role/team update failed: ${updateErr.message}` });
+      }
+      setMessage({ type: 'success', text: `User created: ${email}. They can sign in with that email (magic link or Google if configured).` });
+      setCreateEmail('');
+      setCreateFullName('');
+      setCreateRole('rep');
+      setCreateTeamId('');
+      load();
+    } catch (e) {
+      setMessage({ type: 'error', text: e?.message || 'Failed to create user.' });
+    }
+    setCreateUserLoading(false);
+  }
+
+  async function createTeam() {
+    const name = newTeamName.trim();
+    if (!name) {
+      setMessage({ type: 'error', text: 'Team name is required.' });
+      return;
+    }
+    setCreateTeamLoading(true);
+    setMessage(null);
+    const { data, error: err } = await supabase.from('teams').insert({ name, manager_id: newTeamManagerId || null }).select('id').single();
+    if (err) {
+      setCreateTeamLoading(false);
+      setMessage({ type: 'error', text: err.message || 'Failed to create team.' });
+      return;
+    }
+    if (data?.id && newTeamManagerId) {
+      await supabase.from('users').update({ team_id: data.id, updated_at: new Date().toISOString() }).eq('id', newTeamManagerId);
+    }
+    setCreateTeamLoading(false);
+    setMessage({ type: 'success', text: `Team "${name}" created.` });
+    setNewTeamName('');
+    setNewTeamManagerId('');
+    load();
+  }
+
+  function startImpersonating(userId) {
+    setImpersonatingUserId(userId);
+    navigate('/my');
+  }
+
   if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading admin…</div>;
 
   if (error) {
@@ -166,6 +267,121 @@ export default function Admin() {
         </div>
       </section>
 
+      <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <h3 style={{ marginTop: 0 }}>Create user</h3>
+        <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
+          Create a new user by email. They will receive no email; share the dashboard URL and they can sign in with this email (magic link or Google if configured). Optionally set role and team below.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Email</label>
+            <input
+              type="email"
+              placeholder="user@company.com"
+              value={createEmail}
+              onChange={(e) => setCreateEmail(e.target.value)}
+              style={{ padding: '8px 12px', minWidth: '200px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Full name</label>
+            <input
+              type="text"
+              placeholder="Optional"
+              value={createFullName}
+              onChange={(e) => setCreateFullName(e.target.value)}
+              style={{ padding: '8px 12px', minWidth: '160px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Role</label>
+            <select value={createRole} onChange={(e) => setCreateRole(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+              {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Team</label>
+            <select value={createTeamId} onChange={(e) => setCreateTeamId(e.target.value)} style={{ padding: '8px 12px', minWidth: '140px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+              <option value="">No team</option>
+              {teamList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={createUser}
+            disabled={createUserLoading || !createEmail.trim()}
+            style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '6px', cursor: createUserLoading ? 'wait' : 'pointer' }}
+          >
+            {createUserLoading ? 'Creating…' : 'Create user'}
+          </button>
+        </div>
+      </section>
+
+      <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <h3 style={{ marginTop: 0 }}>Create team</h3>
+        <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
+          Add a new team. Optionally assign a manager (they must already exist as a user).
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Team name</label>
+            <input
+              type="text"
+              placeholder="e.g. West Sales"
+              value={newTeamName}
+              onChange={(e) => setNewTeamName(e.target.value)}
+              style={{ padding: '8px 12px', minWidth: '180px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Manager</label>
+            <select value={newTeamManagerId} onChange={(e) => setNewTeamManagerId(e.target.value)} style={{ padding: '8px 12px', minWidth: '200px', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
+              <option value="">No manager</option>
+              {userList.filter((u) => u.role === 'manager' || u.role === 'admin' || u.role === 'superadmin').map((u) => (
+                <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={createTeam}
+            disabled={createTeamLoading || !newTeamName.trim()}
+            style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '6px', cursor: createTeamLoading ? 'wait' : 'pointer' }}
+          >
+            {createTeamLoading ? 'Creating…' : 'Create team'}
+          </button>
+        </div>
+      </section>
+
+      <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <h3 style={{ marginTop: 0 }}>Impersonate user</h3>
+        <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
+          View the dashboard exactly as another user sees it. Select a user and click Impersonate; use &quot;Exit impersonation&quot; in the banner to return.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <select
+            id="impersonate-select"
+            style={{ padding: '8px 12px', minWidth: '220px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+          >
+            <option value="">Select user to impersonate…</option>
+            {userList.filter((u) => u.id !== currentUserId).map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              const sel = document.getElementById('impersonate-select');
+              const id = sel?.value;
+              if (id) startImpersonating(id);
+            }}
+            style={{ padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+          >
+            Impersonate
+          </button>
+        </div>
+      </section>
+
       <section style={{ overflowX: 'auto' }}>
         <h3 style={{ marginTop: 0 }}>All users</h3>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
@@ -175,6 +391,7 @@ export default function Admin() {
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Email</th>
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Role</th>
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Team</th>
+              <th style={{ padding: '12px 16px', fontWeight: 600 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -210,6 +427,17 @@ export default function Admin() {
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  {u.id !== currentUserId && (
+                    <button
+                      type="button"
+                      onClick={() => startImpersonating(u.id)}
+                      style={{ padding: '4px 10px', fontSize: '0.8125rem', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Impersonate
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

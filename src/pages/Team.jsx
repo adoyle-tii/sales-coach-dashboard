@@ -1,33 +1,35 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
+import { useImpersonation } from '../context/ImpersonationContext';
 
 export default function Team() {
+  const { dataUserId, viewProfile } = useImpersonation();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = (await supabase?.auth.getUser()) || {};
-        const user = res?.data?.user;
-        if (!user || !supabase) {
+        if (!dataUserId || !supabase) {
           setLoading(false);
           return;
         }
-        const profile = await supabase.from('users').select('team_id').eq('id', user.id).single();
-        const teamId = profile?.data?.team_id;
+        const teamId = viewProfile?.team_id;
         if (!teamId) {
+          setMembers([]);
           setLoading(false);
           return;
         }
         const { data } = await supabase.from('users').select('id, full_name, email, role').eq('team_id', teamId).eq('role', 'rep');
         setMembers(data ?? []);
+      } catch {
+        setMembers([]);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [dataUserId, viewProfile?.team_id]);
 
   if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading team…</div>;
 
