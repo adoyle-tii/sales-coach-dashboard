@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import My from './pages/My';
 import Team from './pages/Team';
 import TeamMember from './pages/TeamMember';
+import Admin from './pages/Admin';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -59,7 +60,8 @@ export default function App() {
         <Route path="/my" element={<My />} />
         <Route path="/team" element={<Team />} />
         <Route path="/team/:userId" element={<TeamMember />} />
-        <Route path="/" element={<Navigate to={profile?.role === 'manager' ? '/team' : '/my'} replace />} />
+        <Route path="/admin" element={profile?.role === 'superadmin' ? <Admin /> : <Navigate to="/" replace />} />
+        <Route path="/" element={<Navigate to={profile?.role === 'superadmin' ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

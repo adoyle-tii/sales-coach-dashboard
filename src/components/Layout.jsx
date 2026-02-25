@@ -11,6 +11,9 @@ export default function Layout({ user, profile, onSignOut }) {
           {profile?.role === 'manager' && (
             <Link to="/team" style={{ color: 'white', textDecoration: 'none' }}>Team</Link>
           )}
+          {profile?.role === 'superadmin' && (
+            <Link to="/admin" style={{ color: '#fcd34d', textDecoration: 'none', fontWeight: 600 }}>Admin</Link>
+          )}
           <span style={{ fontSize: '0.875rem', opacity: 0.9 }}>{profile?.full_name || user?.email}</span>
           <button type="button" onClick={() => { onSignOut(); navigate('/login'); }} style={{ padding: '6px 12px', cursor: 'pointer' }}>
             Sign out
