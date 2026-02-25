@@ -11,6 +11,7 @@ export default function Admin() {
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [saving, setSaving] = useState(null);
   const [message, setMessage] = useState(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
@@ -21,14 +22,26 @@ export default function Admin() {
   }, []);
 
   async function load() {
-    if (!supabase) return;
-    const [uRes, tRes] = await Promise.all([
-      supabase.from('users').select('id, email, full_name, role, team_id').order('email'),
-      supabase.from('teams').select('id, name, manager_id').order('name'),
-    ]);
-    setUsers(uRes?.data || []);
-    setTeams(tRes?.data || []);
-    setLoading(false);
+    if (!supabase) {
+      setError('Supabase is not configured.');
+      setLoading(false);
+      return;
+    }
+    setError(null);
+    try {
+      const [uRes, tRes] = await Promise.all([
+        supabase.from('users').select('id, email, full_name, role, team_id').order('email'),
+        supabase.from('teams').select('id, name, manager_id').order('name'),
+      ]);
+      if (uRes?.error) setError(uRes.error.message || 'Failed to load users.');
+      else if (tRes?.error) setError(tRes.error.message || 'Failed to load teams.');
+      setUsers(uRes?.data ?? []);
+      setTeams(tRes?.data ?? []);
+    } catch (e) {
+      setError(e?.message || 'Failed to load.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function updateRole(userId, newRole) {
@@ -87,9 +100,25 @@ export default function Admin() {
     setPromoteLoading(false);
   }
 
-  if (loading) return <div>Loading admin...</div>;
+  if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading admin…</div>;
 
-  const teamName = (id) => teams.find((t) => t.id === id)?.name || '—';
+  if (error) {
+    return (
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <h2 style={{ marginTop: 0 }}>Admin</h2>
+        <div style={{ padding: '16px', background: '#fef2f2', color: '#991b1b', borderRadius: '8px' }}>
+          {error}
+        </div>
+        <button type="button" onClick={() => { setError(null); setLoading(true); load(); }} style={{ marginTop: '16px', padding: '8px 16px' }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const userList = users || [];
+  const teamList = teams || [];
+  const teamName = (id) => teamList.find((t) => t.id === id)?.name || '—';
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
@@ -149,7 +178,7 @@ export default function Admin() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {userList.map((u) => (
               <tr key={u.id} style={{ borderTop: '1px solid #e2e8f0' }}>
                 <td style={{ padding: '12px 16px' }}>{u.full_name || '—'}</td>
                 <td style={{ padding: '12px 16px', fontSize: '0.875rem' }}>{u.email || '—'}</td>
@@ -177,7 +206,7 @@ export default function Admin() {
                     style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', minWidth: '140px' }}
                   >
                     <option value="">No team</option>
-                    {teams.map((t) => (
+                    {teamList.map((t) => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
@@ -186,7 +215,7 @@ export default function Admin() {
             ))}
           </tbody>
         </table>
-        {users.length === 0 && <p style={{ color: '#64748b', padding: '16px' }}>No users yet. Users appear after they sign in to the dashboard.</p>}
+        {userList.length === 0 && <p style={{ color: '#64748b', padding: '16px' }}>No users yet. Users appear after they sign in to the dashboard.</p>}
       </section>
 
       <section style={{ marginTop: '32px', padding: '20px', background: '#f8fafc', borderRadius: '8px', fontSize: '0.875rem', color: '#64748b' }}>

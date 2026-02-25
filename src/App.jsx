@@ -10,7 +10,7 @@ import Layout from './components/Layout';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(undefined);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,6 +21,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
+      else setProfile(null);
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -34,7 +35,7 @@ export default function App() {
   async function fetchProfile(userId) {
     if (!supabase) return;
     const { data } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
-    setProfile(data || null);
+    setProfile(data ?? null);
   }
 
   if (loading) {
@@ -51,6 +52,15 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+    );
+  }
+
+  // Wait for profile so /admin doesn't redirect away before we know role
+  if (profile === undefined && user) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        Loading...
+      </div>
     );
   }
 
