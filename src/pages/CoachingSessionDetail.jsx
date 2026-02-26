@@ -41,8 +41,18 @@ export default function CoachingSessionDetail() {
 
   const notes = session.coaching_notes && typeof session.coaching_notes === 'object' ? session.coaching_notes : {};
   const agreedSteps = Array.isArray(notes.agreedSteps) ? notes.agreedSteps : [];
-  const userMessages = Array.isArray(notes.userMessages) ? notes.userMessages : [];
-  const coachSummary = notes.coachSummary || session.session_summary || '';
+  const insights = Array.isArray(notes.insights) ? notes.insights : [];
+  const coachSummary = notes.coachSummary ?? session.session_summary ?? '';
+
+  const rawTranscript = Array.isArray(session.session_transcript) ? session.session_transcript : [];
+  const hasRoleInTranscript = rawTranscript.length > 0 && rawTranscript.some((m) => m && m.role != null);
+  const sessionTranscript = hasRoleInTranscript
+    ? rawTranscript
+    : [];
+  const rawUserMessages = Array.isArray(notes.userMessages) ? notes.userMessages : [];
+  const sellerOnlyLog = rawUserMessages.length > 0
+    ? rawUserMessages
+    : rawTranscript.filter((m) => m && (m.text != null || m.message != null)).map((m) => ({ text: m.text ?? m.message, timestamp: m.timestamp }));
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
@@ -98,12 +108,84 @@ export default function CoachingSessionDetail() {
         )}
       </div>
 
+      {insights.length > 0 && (
+        <div style={cardStyle}>
+          <div style={{ ...sectionHeading, color: '#7c3aed' }}>Coaching notes</div>
+          <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
+            Same format as the live session: moments captured by the coach (LLM) during the session.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {insights.map((item, i) => {
+              if (!item || !item.type) return null;
+              // Match extension renderNoteCard meta exactly (emoji + label)
+              const insightMeta = {
+                action: { emoji: '🎯', label: 'Action' },
+                insight: { emoji: '💡', label: 'Insight' },
+                challenge: { emoji: '❓', label: 'Reflect' },
+                growth: { emoji: '📈', label: 'Growth' },
+                takeaway: { emoji: '✅', label: 'Takeaway' },
+                strength: { emoji: '💪', label: 'Strength' },
+                breakthrough: { emoji: '⚡', label: 'Breakthrough' },
+                coaching_moment: { emoji: '🔍', label: 'Coaching Moment' },
+              };
+              const meta = insightMeta[item.type] || insightMeta.insight;
+
+              if (item.type === 'coaching_moment' && (item.gap || item.fix)) {
+                return (
+                  <div key={i} style={{ padding: '14px', background: '#faf5ff', borderRadius: '8px', borderLeft: '4px solid #7c3aed' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6d28d9', marginBottom: '8px' }}>{meta.emoji} {meta.label}</div>
+                    <p style={{ margin: '0 0 6px', fontSize: '0.9rem' }}>{item.gap}</p>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#7c3aed', marginBottom: '6px' }}>→ Try this</div>
+                    <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.fix}</p>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid #64748b' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>{meta.emoji} {meta.label}</div>
+                  <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{item.text}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={cardStyle}>
-        <div style={{ ...sectionHeading, color: '#4f46e5' }}>Session log (seller messages)</div>
-        {userMessages.length > 0 ? (
+        <div style={{ ...sectionHeading, color: '#4f46e5' }}>Session transcript</div>
+        {sessionTranscript.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {userMessages.map((msg, i) => (
+            {sessionTranscript.map((turn, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: '12px',
+                  borderRadius: '6px',
+                  borderLeft: '4px solid',
+                  background: turn.role === 'coach' ? '#eff6ff' : '#f8fafc',
+                  borderLeftColor: turn.role === 'coach' ? '#3b82f6' : '#4f46e5'
+                }}
+              >
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                  {turn.role === 'coach' ? 'Coach' : 'Seller'}
+                </div>
+                <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{turn.text}</p>
+                {turn.timestamp && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px' }}>
+                    {new Date(turn.timestamp).toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : sellerOnlyLog.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '8px', marginTop: 0 }}>
+              Seller messages only (full coach + seller transcript not yet captured for this session).
+            </p>
+            {sellerOnlyLog.map((msg, i) => (
               <div key={i} style={{ padding: '12px', background: '#f8fafc', borderRadius: '6px', borderLeft: '4px solid #4f46e5' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>Seller</div>
                 <p style={{ margin: 0, fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{msg.text}</p>
                 {msg.timestamp && (
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '6px' }}>
@@ -114,7 +196,7 @@ export default function CoachingSessionDetail() {
             ))}
           </div>
         ) : (
-          <p style={{ color: '#64748b', margin: 0 }}>No message log captured for this session.</p>
+          <p style={{ color: '#64748b', margin: 0 }}>No transcript captured for this session.</p>
         )}
       </div>
 
