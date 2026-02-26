@@ -42,9 +42,9 @@ export default function App() {
       setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
       return;
     }
-    if (error && error.code === '42703') {
-      const { data: fallback } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
-      setProfile(fallback ? { ...fallback, can_impersonate: false } : null);
+    const fallbackRes = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
+    if (fallbackRes.data) {
+      setProfile({ ...fallbackRes.data, can_impersonate: false });
       return;
     }
     setProfile(null);
@@ -72,6 +72,24 @@ export default function App() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
         Loading...
+      </div>
+    );
+  }
+
+  if (user && profile === null) {
+    return (
+      <div style={{ maxWidth: '560px', margin: '40px auto', padding: '24px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
+        <h2 style={{ marginTop: 0, color: '#92400e' }}>Profile not found</h2>
+        <p style={{ color: '#78350f', marginBottom: '16px' }}>
+          You're signed in as <strong>{user.email}</strong>, but there's no matching row in <code>public.users</code> or it's not visible (e.g. RLS). Without that, your role can't be loaded and the Admin panel won't show.
+        </p>
+        <p style={{ color: '#78350f', marginBottom: '12px' }}>
+          To set yourself as superadmin, run this in the Supabase SQL Editor (replace the email with yours):
+        </p>
+        <pre style={{ padding: '12px', background: '#fef3c7', borderRadius: '6px', overflow: 'auto', fontSize: '0.8125rem' }}>{`UPDATE public.users\nSET role = 'superadmin'\nWHERE email = '${user.email || 'your@email.com'}';`}</pre>
+        <p style={{ color: '#78350f', marginTop: '16px', marginBottom: 0 }}>
+          If your email doesn't exist in <code>public.users</code> yet, sign in once so the trigger creates a row, then run the UPDATE above. After that, refresh this page.
+        </p>
       </div>
     );
   }
