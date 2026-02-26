@@ -21,12 +21,17 @@ export default function App() {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        await supabase.auth.setSession(session);
+        await fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+      }
       setLoading(false);
-    });
+    })();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
@@ -37,14 +42,14 @@ export default function App() {
 
   async function fetchProfile(userId) {
     if (!supabase) return;
-    const { data, error } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).single();
-    if (data) {
-      setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
+    const { data: dataFull } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).maybeSingle();
+    if (dataFull) {
+      setProfile({ ...dataFull, can_impersonate: dataFull.can_impersonate ?? false });
       return;
     }
-    const fallbackRes = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
-    if (fallbackRes.data) {
-      setProfile({ ...fallbackRes.data, can_impersonate: false });
+    const { data: dataMin } = await supabase.from('users').select('id, role, full_name').eq('id', userId).maybeSingle();
+    if (dataMin) {
+      setProfile({ ...dataMin, can_impersonate: false });
       return;
     }
     setProfile(null);
