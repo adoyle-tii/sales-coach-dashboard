@@ -37,6 +37,17 @@ export default function App() {
 
   async function fetchProfile(userId) {
     if (!supabase) return;
+    const { data: rpcData } = await supabase.rpc('get_my_profile');
+    if (rpcData && Array.isArray(rpcData) && rpcData[0]) {
+      const row = rpcData[0];
+      setProfile({
+        id: row.id,
+        role: row.role,
+        full_name: row.full_name,
+        can_impersonate: row.can_impersonate ?? false,
+      });
+      return;
+    }
     const { data } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).single();
     if (data) {
       setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
