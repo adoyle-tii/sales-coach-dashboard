@@ -13,7 +13,7 @@ const ROLES = [
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { setImpersonatingUserId } = useImpersonation();
+  const { setImpersonatingUserId, realProfile } = useImpersonation();
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +54,7 @@ export default function Admin() {
     setError(null);
     try {
       const [uRes, tRes] = await Promise.all([
-        supabase.from('users').select('id, email, full_name, role, team_id').order('email'),
+        supabase.from('users').select('id, email, full_name, role, team_id, can_impersonate').order('email'),
         supabase.from('teams').select('id, name, manager_id').order('name'),
       ]);
       if (uRes?.error) setError(uRes.error.message || 'Failed to load users.');
@@ -94,6 +94,20 @@ export default function Admin() {
     }
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, team_id: teamId || null } : u)));
     setMessage({ type: 'success', text: 'Team updated.' });
+  }
+
+  async function updateCanImpersonate(userId, canImpersonate) {
+    if (!supabase) return;
+    setSaving(userId);
+    setMessage(null);
+    const { error } = await supabase.from('users').update({ can_impersonate: !!canImpersonate, updated_at: new Date().toISOString() }).eq('id', userId);
+    setSaving(null);
+    if (error) {
+      setMessage({ type: 'error', text: error.message });
+      return;
+    }
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, can_impersonate: !!canImpersonate } : u)));
+    setMessage({ type: 'success', text: canImpersonate ? 'Impersonation granted.' : 'Impersonation revoked.' });
   }
 
   async function promoteByEmail() {
@@ -220,12 +234,16 @@ export default function Admin() {
   const userList = users || [];
   const teamList = teams || [];
   const teamName = (id) => teamList.find((t) => t.id === id)?.name || '—';
+  const isSuperadmin = realProfile?.role === 'superadmin';
+  const canImpersonate = isSuperadmin || realProfile?.can_impersonate;
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
       <h2 style={{ marginTop: 0 }}>Admin</h2>
       <p style={{ color: '#64748b', marginBottom: '24px' }}>
-        Manage users, roles, and teams. Superadmins cannot be changed from this screen.
+        {isSuperadmin
+          ? 'Manage users, roles, and teams. Grant impersonation to specific admins via the table below.'
+          : 'View the dashboard as another user by impersonating. Select a user below to view their data.'}
       </p>
 
       {message && (
@@ -242,6 +260,7 @@ export default function Admin() {
         </div>
       )}
 
+      {isSuperadmin && (
       <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <h3 style={{ marginTop: 0 }}>Add admin by email</h3>
         <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
@@ -266,7 +285,9 @@ export default function Admin() {
           </button>
         </div>
       </section>
+      )}
 
+      {isSuperadmin && (
       <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <h3 style={{ marginTop: 0 }}>Create user</h3>
         <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
@@ -316,7 +337,9 @@ export default function Admin() {
           </button>
         </div>
       </section>
+      )}
 
+      {isSuperadmin && (
       <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <h3 style={{ marginTop: 0 }}>Create team</h3>
         <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
@@ -352,7 +375,9 @@ export default function Admin() {
           </button>
         </div>
       </section>
+      )}
 
+      {canImpersonate && (
       <section style={{ marginBottom: '32px', padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <h3 style={{ marginTop: 0 }}>Impersonate user</h3>
         <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '12px' }}>
@@ -381,6 +406,7 @@ export default function Admin() {
           </button>
         </div>
       </section>
+      )}
 
       <section style={{ overflowX: 'auto' }}>
         <h3 style={{ marginTop: 0 }}>All users</h3>
@@ -391,6 +417,7 @@ export default function Admin() {
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Email</th>
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Role</th>
               <th style={{ padding: '12px 16px', fontWeight: 600 }}>Team</th>
+              {isSuperadmin && <th style={{ padding: '12px 16px', fontWeight: 600 }}>Can impersonate</th>}
               <th style={{ padding: '12px 16px', fontWeight: 600 }}></th>
             </tr>
           </thead>
@@ -402,7 +429,7 @@ export default function Admin() {
                 <td style={{ padding: '12px 16px' }}>
                   {u.role === 'superadmin' ? (
                     <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 8px', borderRadius: '4px', fontSize: '0.875rem' }}>Superadmin</span>
-                  ) : (
+                  ) : isSuperadmin ? (
                     <select
                       value={u.role}
                       onChange={(e) => updateRole(u.id, e.target.value)}
@@ -413,23 +440,46 @@ export default function Admin() {
                         <option key={r.value} value={r.value}>{r.label}</option>
                       ))}
                     </select>
+                  ) : (
+                    <span style={{ fontSize: '0.875rem' }}>{u.role}</span>
                   )}
                 </td>
                 <td style={{ padding: '12px 16px' }}>
-                  <select
-                    value={u.team_id || ''}
-                    onChange={(e) => updateTeam(u.id, e.target.value || null)}
-                    disabled={saving === u.id || u.role === 'superadmin'}
-                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', minWidth: '140px' }}
-                  >
-                    <option value="">No team</option>
-                    {teamList.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                  {isSuperadmin ? (
+                    <select
+                      value={u.team_id || ''}
+                      onChange={(e) => updateTeam(u.id, e.target.value || null)}
+                      disabled={saving === u.id || u.role === 'superadmin'}
+                      style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', minWidth: '140px' }}
+                    >
+                      <option value="">No team</option>
+                      {teamList.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: '0.875rem' }}>{teamName(u.team_id)}</span>
+                  )}
                 </td>
+                {isSuperadmin && (
                 <td style={{ padding: '12px 16px' }}>
-                  {u.id !== currentUserId && (
+                  {u.role === 'admin' ? (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!u.can_impersonate}
+                        onChange={(e) => updateCanImpersonate(u.id, e.target.checked)}
+                        disabled={saving === u.id}
+                      />
+                      <span style={{ fontSize: '0.875rem' }}>Allow</span>
+                    </label>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>—</span>
+                  )}
+                </td>
+                )}
+                <td style={{ padding: '12px 16px' }}>
+                  {canImpersonate && u.id !== currentUserId && (
                     <button
                       type="button"
                       onClick={() => startImpersonating(u.id)}
@@ -451,8 +501,8 @@ export default function Admin() {
         <ul style={{ margin: 0, paddingLeft: '20px' }}>
           <li><strong>Rep</strong> — Own dashboard only (My Dashboard).</li>
           <li><strong>Manager</strong> — Team view; can see reps in their team and manage development plans.</li>
-          <li><strong>Admin</strong> — Same as manager but can see all users/teams (read-only for cross-team).</li>
-          <li><strong>Superadmin</strong> — Full admin: manage roles, teams, and all users. Set only via Supabase (e.g. SQL).</li>
+          <li><strong>Admin</strong> — Same as manager but can see all users/teams (read-only for cross-team). Superadmins can grant specific admins <strong>impersonation permission</strong>; only those admins can use the Impersonate feature.</li>
+          <li><strong>Superadmin</strong> — Full admin: manage roles, teams, and all users; grant or revoke impersonation for admins. Set only via Supabase (e.g. SQL).</li>
         </ul>
       </section>
     </div>

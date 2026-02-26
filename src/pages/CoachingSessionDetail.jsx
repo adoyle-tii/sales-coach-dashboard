@@ -199,15 +199,6 @@ export default function CoachingSessionDetail() {
           <p style={{ color: '#64748b', margin: 0 }}>No transcript captured for this session.</p>
         )}
       </div>
-
-      {Object.keys(notes).length > 0 && (
-        <div style={cardStyle}>
-          <div style={{ ...sectionHeading, color: '#64748b' }}>Full coaching notes (raw)</div>
-          <pre style={{ margin: 0, fontSize: '0.8125rem', overflow: 'auto', maxHeight: '400px', padding: '12px', background: '#f1f5f9', borderRadius: '6px' }}>
-            {JSON.stringify(notes, null, 2)}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }

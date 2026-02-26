@@ -37,8 +37,17 @@ export default function App() {
 
   async function fetchProfile(userId) {
     if (!supabase) return;
-    const { data } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
-    setProfile(data ?? null);
+    const { data, error } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).single();
+    if (data) {
+      setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
+      return;
+    }
+    if (error && error.code === '42703') {
+      const { data: fallback } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
+      setProfile(fallback ? { ...fallback, can_impersonate: false } : null);
+      return;
+    }
+    setProfile(null);
   }
 
   if (loading) {
@@ -78,8 +87,8 @@ export default function App() {
         <Route path="my/session/:id" element={<CoachingSessionDetail />} />
         <Route path="team" element={<Team />} />
           <Route path="team/:userId" element={<TeamMember />} />
-          <Route path="admin" element={profile?.role === 'superadmin' ? <Admin /> : <Navigate to="/" replace />} />
-          <Route index element={<Navigate to={profile?.role === 'superadmin' ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
+          <Route path="admin" element={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? <Admin /> : <Navigate to="/" replace />} />
+          <Route index element={<Navigate to={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
         </Route>
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
