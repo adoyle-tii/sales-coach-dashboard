@@ -3,14 +3,29 @@ import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
 
-const cardStyle = { padding: '20px', background: 'white', borderRadius: '8px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' };
-const sectionHeading = { fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', paddingBottom: '6px', borderBottom: '2px solid #e2e8f0' };
+function ScoreRing({ score, max = 5 }) {
+  const pct = Math.min(100, (score / max) * 100);
+  const color = score >= 4 ? '#16a34a' : score >= 3 ? '#7c3aed' : score >= 2 ? '#d97706' : '#dc2626';
+  const r = 22, circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  return (
+    <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
+      <svg width="60" height="60" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="30" cy="30" r={r} fill="none" stroke="#e2e8f0" strokeWidth="5" />
+        <circle cx="30" cy="30" r={r} fill="none" stroke={color} strokeWidth="5"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: '1rem', fontWeight: 700, color, lineHeight: 1 }}>{Number(score).toFixed(1)}</span>
+        <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>/{max}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function AssessmentDetail() {
   const { id, userId: memberUserId } = useParams();
   const { dataUserId } = useImpersonation();
-  // When navigated from a team member page (/team/:userId/assessment/:id), use the member's
-  // userId directly; otherwise fall back to the impersonation-aware dataUserId.
   const targetUserId = memberUserId || dataUserId;
   const backLink = memberUserId ? `/team/${memberUserId}` : '/my';
   const backLabel = memberUserId ? '← Back to team member' : '← Back to My Dashboard';
@@ -19,24 +34,19 @@ export default function AssessmentDetail() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!id || !targetUserId || !supabase) {
-      setLoading(false);
-      return;
-    }
+    if (!id || !targetUserId || !supabase) { setLoading(false); return; }
     supabase.from('skill_assessments').select('*').eq('id', id).eq('user_id', targetUserId).single()
-      .then(({ data, error: e }) => {
-        if (e) setError(e.message);
-        else setAssessment(data);
-      })
+      .then(({ data, error: e }) => { if (e) setError(e.message); else setAssessment(data); })
       .finally(() => setLoading(false));
   }, [id, targetUserId]);
 
-  if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading assessment…</div>;
+  if (loading) return <div className="loading-screen"><div className="spinner" /> Loading assessment…</div>;
+
   if (error || !assessment) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
-        <p style={{ color: '#991b1b' }}>{error || 'Assessment not found.'}</p>
+      <div>
+        <Link to={backLink} className="back-link">{backLabel}</Link>
+        <div className="alert alert-error">{error || 'Assessment not found.'}</div>
       </div>
     );
   }
@@ -45,111 +55,133 @@ export default function AssessmentDetail() {
   const meetingDate = assessment.meeting_date || assessment.created_at;
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
+    <div style={{ maxWidth: '800px' }}>
+      <Link to={backLink} className="back-link">{backLabel}</Link>
 
-      <div style={{ ...cardStyle, marginBottom: '24px' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '8px' }}>{assessment.meeting_title || 'Untitled meeting'}</h2>
-        <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '4px' }}>
-          {meetingDate && new Date(meetingDate).toLocaleString()} · {assessment.competency || 'Problem discovery'}
-          {assessment.meeting_type && ` · ${assessment.meeting_type}`}
-        </div>
-        <div style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-          Overall score: {assessment.overall_score != null ? Number(assessment.overall_score).toFixed(1) : '—'}/5
+      {/* Header */}
+      <div className="card section">
+        <div className="card-body">
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
+            {assessment.overall_score != null && <ScoreRing score={Number(assessment.overall_score)} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{ margin: '0 0 4px', fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>
+                {assessment.meeting_title || 'Untitled meeting'}
+              </h1>
+              <div style={{ fontSize: '0.875rem', color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                {meetingDate && <span>{new Date(meetingDate).toLocaleString()}</span>}
+                {assessment.competency && <span className="badge badge-purple">{assessment.competency}</span>}
+                {assessment.meeting_type && <span className="badge badge-slate">{assessment.meeting_type}</span>}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Fallback: no raw breakdown */}
       {raw.length === 0 && (
-        <div style={cardStyle}>
-          <p style={{ color: '#64748b' }}>No detailed breakdown saved. Skill scores:</p>
-          <ul style={{ margin: 0, paddingLeft: '20px' }}>
-            {Object.entries(assessment.skill_scores || {}).map(([skill, score]) => (
-              <li key={skill}>{skill}: {Number(score).toFixed(1)}/5</li>
-            ))}
-          </ul>
+        <div className="card section">
+          <div className="card-header"><h2 className="card-title">Skill scores</h2></div>
+          <div className="card-body-tight">
+            {Object.entries(assessment.skill_scores || {}).map(([skill, score]) => {
+              const s = Number(score);
+              const color = s >= 4 ? '#16a34a' : s >= 3 ? '#7c3aed' : s >= 2 ? '#d97706' : '#dc2626';
+              return (
+                <div key={skill} className="list-item">
+                  <span style={{ flex: 1, fontSize: '0.9rem' }}>{skill}</span>
+                  <span style={{ fontWeight: 700, color }}>{s.toFixed(1)}/5</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
+      {/* Per-skill cards */}
       {raw.map((a, index) => {
         const skillName = a.skill || a.skillName || `Skill ${index + 1}`;
         const rating = a.rating != null ? Number(a.rating) : null;
-        const ratingColor = rating >= 4 ? '#16a34a' : rating >= 3 ? '#ca8a04' : '#dc2626';
         const strengths = a.strengths || [];
-        const improvementTitle = a.improvement_title || 'Areas for Improvement';
+        const improvementTitle = a.improvement_title || 'Areas for improvement';
         const improvements = a.improvements || [];
         const coachingTips = a.coaching_tips || [];
         const levelChecks = a.level_checks || [];
 
         return (
-          <div key={index} style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{skillName}</h3>
-              {rating != null && (
-                <span style={{ fontSize: '1.5rem', fontWeight: 700, color: ratingColor }}>{rating}/5</span>
-              )}
+          <div key={index} className="card section">
+            <div className="card-header">
+              <h2 className="card-title" style={{ fontSize: '1.0625rem' }}>{skillName}</h2>
+              {rating != null && <ScoreRing score={rating} />}
             </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-            {levelChecks.length > 0 && (
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ ...sectionHeading, color: '#6d28d9', borderBottomColor: '#e9d5ff' }}>Level checks</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {[...levelChecks].sort((x, y) => (x.level || 0) - (y.level || 0)).map((lc, i) => (
-                    <details key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-                      <summary style={{ padding: '12px', cursor: 'pointer', background: '#f8fafc', fontWeight: 500 }}>
-                        Level {lc.level ?? ''}: {lc.name || `Level ${lc.level}`}
-                      </summary>
-                      <div style={{ padding: '12px', borderTop: '1px solid #e2e8f0' }}>
-                        {(lc.checks || []).map((c, j) => (
-                          <div key={j} style={{ marginBottom: '8px', fontSize: '0.875rem' }}>
-                            <span style={{ fontWeight: 500 }}>{c.characteristic}</span>
-                            {c.reason && <div style={{ color: '#64748b', marginTop: '2px' }}>{c.reason}</div>}
-                            {c.evidence && c.evidence.length > 0 && (
-                              <ul style={{ margin: '4px 0 0', paddingLeft: '20px', color: '#475569' }}>
-                                {c.evidence.map((ev, k) => <li key={k}>{typeof ev === 'string' ? ev : JSON.stringify(ev)}</li>)}
-                              </ul>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ ...sectionHeading, color: '#16a34a', borderBottomColor: '#bbf7d0' }}>Strengths exhibited</div>
-              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
-                {strengths.length ? strengths.map((s, i) => <li key={i}>{s}</li>) : <li style={{ color: '#64748b' }}>None identified.</li>}
-              </ul>
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ ...sectionHeading, color: '#ca8a04', borderBottomColor: '#fde68a' }}>{improvementTitle}</div>
-              <div style={{ fontSize: '0.9rem' }}>
-                {improvements.length ? (
-                  improvements.map((imp, i) => (
-                    <div key={i} style={{ marginBottom: '12px', paddingTop: i ? '12px' : 0, borderTop: i ? '1px solid #e2e8f0' : 'none' }}>
-                      <p style={{ margin: '0 0 6px', fontWeight: 500 }}>{imp.point || 'General improvement'}</p>
-                      {imp.example && (imp.example.instead_of || imp.example.try_this) && (
-                        <div style={{ marginLeft: '12px', paddingLeft: '12px', borderLeft: '4px solid #e2e8f0', color: '#64748b', fontStyle: 'italic' }}>
-                          {imp.example.instead_of && <p style={{ margin: '0 0 4px' }}><strong>Instead of:</strong> {imp.example.instead_of}</p>}
-                          {imp.example.try_this && <p style={{ margin: 0 }}><strong>Try this:</strong> {imp.example.try_this}</p>}
+              {/* Level checks */}
+              {levelChecks.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6d28d9', marginBottom: '10px', paddingBottom: '6px', borderBottom: '2px solid #e9d5ff' }}>Level checks</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[...levelChecks].sort((x, y) => (x.level || 0) - (y.level || 0)).map((lc, i) => (
+                      <details key={i} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                        <summary style={{ padding: '10px 14px', cursor: 'pointer', background: '#f8fafc', fontWeight: 500, fontSize: '0.875rem' }}>
+                          Level {lc.level ?? ''}: {lc.name || `Level ${lc.level}`}
+                        </summary>
+                        <div style={{ padding: '12px 14px', borderTop: '1px solid #e2e8f0' }}>
+                          {(lc.checks || []).map((c, j) => (
+                            <div key={j} style={{ marginBottom: '10px', fontSize: '0.875rem' }}>
+                              <span style={{ fontWeight: 600, color: '#334155' }}>{c.characteristic}</span>
+                              {c.reason && <div style={{ color: '#64748b', marginTop: '3px', lineHeight: 1.5 }}>{c.reason}</div>}
+                              {c.evidence?.length > 0 && (
+                                <ul style={{ margin: '6px 0 0', paddingLeft: '18px', color: '#475569' }}>
+                                  {c.evidence.map((ev, k) => <li key={k} style={{ marginBottom: '3px' }}>{typeof ev === 'string' ? ev : JSON.stringify(ev)}</li>)}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p style={{ color: '#64748b', margin: 0 }}>None identified.</p>
-                )}
-              </div>
-            </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            <div>
-              <div style={{ ...sectionHeading, color: '#1d4ed8', borderBottomColor: '#bfdbfe' }}>Coaching tips</div>
-              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
-                {coachingTips.length ? coachingTips.map((tip, i) => <li key={i}>{tip}</li>) : <li style={{ color: '#64748b' }}>None identified.</li>}
-              </ul>
+              {/* Strengths */}
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#16a34a', marginBottom: '10px', paddingBottom: '6px', borderBottom: '2px solid #bbf7d0' }}>Strengths exhibited</div>
+                {strengths.length ? (
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.875rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {strengths.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                ) : <p style={{ margin: 0, fontSize: '0.875rem', color: '#94a3b8' }}>None identified.</p>}
+              </div>
+
+              {/* Improvements */}
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#d97706', marginBottom: '10px', paddingBottom: '6px', borderBottom: '2px solid #fde68a' }}>{improvementTitle}</div>
+                {improvements.length ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {improvements.map((imp, i) => (
+                      <div key={i}>
+                        <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: '0.875rem', color: '#334155' }}>{imp.point || 'General improvement'}</p>
+                        {imp.example && (imp.example.instead_of || imp.example.try_this) && (
+                          <div style={{ marginLeft: '10px', padding: '10px 14px', background: '#f8fafc', borderLeft: '4px solid #e2e8f0', borderRadius: '0 8px 8px 0', fontSize: '0.8125rem', color: '#475569' }}>
+                            {imp.example.instead_of && <p style={{ margin: '0 0 6px' }}><strong style={{ color: '#dc2626' }}>Instead of:</strong> {imp.example.instead_of}</p>}
+                            {imp.example.try_this && <p style={{ margin: 0 }}><strong style={{ color: '#16a34a' }}>Try this:</strong> {imp.example.try_this}</p>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : <p style={{ margin: 0, fontSize: '0.875rem', color: '#94a3b8' }}>None identified.</p>}
+              </div>
+
+              {/* Coaching tips */}
+              {coachingTips.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#2563eb', marginBottom: '10px', paddingBottom: '6px', borderBottom: '2px solid #bfdbfe' }}>Coaching tips</div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.875rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {coachingTips.map((tip, i) => <li key={i}>{tip}</li>)}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         );
