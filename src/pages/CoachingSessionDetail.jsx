@@ -7,33 +7,38 @@ const cardStyle = { padding: '20px', background: 'white', borderRadius: '8px', m
 const sectionHeading = { fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', paddingBottom: '6px', borderBottom: '2px solid #e2e8f0' };
 
 export default function CoachingSessionDetail() {
-  const { id } = useParams();
+  const { id, userId: memberUserId } = useParams();
   const { dataUserId } = useImpersonation();
+  // When navigated from a team member page (/team/:userId/session/:id), use the member's
+  // userId directly; otherwise fall back to the impersonation-aware dataUserId.
+  const targetUserId = memberUserId || dataUserId;
+  const backLink = memberUserId ? `/team/${memberUserId}` : '/my';
+  const backLabel = memberUserId ? '← Back to team member' : '← Back to My Dashboard';
   const [session, setSession] = useState(null);
   const [actionItems, setActionItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!id || !dataUserId || !supabase) {
+    if (!id || !targetUserId || !supabase) {
       setLoading(false);
       return;
     }
     Promise.all([
-      supabase.from('coaching_sessions').select('*').eq('id', id).eq('user_id', dataUserId).single(),
+      supabase.from('coaching_sessions').select('*').eq('id', id).eq('user_id', targetUserId).single(),
       supabase.from('action_items').select('*').eq('session_id', id).order('created_at', { ascending: true })
     ]).then(([sRes, aRes]) => {
       if (sRes.error) setError(sRes.error.message);
       else setSession(sRes.data);
       setActionItems(aRes?.data ?? []);
     }).finally(() => setLoading(false));
-  }, [id, dataUserId]);
+  }, [id, targetUserId]);
 
   if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading session…</div>;
   if (error || !session) {
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <Link to="/my" style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>← Back to My Dashboard</Link>
+        <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
         <p style={{ color: '#991b1b' }}>{error || 'Session not found.'}</p>
       </div>
     );
@@ -56,7 +61,7 @@ export default function CoachingSessionDetail() {
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <Link to="/my" style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>← Back to My Dashboard</Link>
+      <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
 
       <div style={{ ...cardStyle, marginBottom: '24px' }}>
         <h2 style={{ marginTop: 0, marginBottom: '8px' }}>Coaching session</h2>

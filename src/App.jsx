@@ -112,6 +112,8 @@ export default function App() {
         <Route path="my/session/:id" element={<CoachingSessionDetail />} />
         <Route path="team" element={<Team />} />
           <Route path="team/:userId" element={<TeamMember />} />
+          <Route path="team/:userId/assessment/:id" element={<AssessmentDetail />} />
+          <Route path="team/:userId/session/:id" element={<CoachingSessionDetail />} />
           <Route path="admin" element={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? <Admin /> : <Navigate to="/" replace />} />
           <Route index element={<Navigate to={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? '/admin' : profile?.role === 'manager' ? '/team' : '/my'} replace />} />
         </Route>

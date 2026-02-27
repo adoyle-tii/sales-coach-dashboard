@@ -7,30 +7,35 @@ const cardStyle = { padding: '20px', background: 'white', borderRadius: '8px', m
 const sectionHeading = { fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', paddingBottom: '6px', borderBottom: '2px solid #e2e8f0' };
 
 export default function AssessmentDetail() {
-  const { id } = useParams();
+  const { id, userId: memberUserId } = useParams();
   const { dataUserId } = useImpersonation();
+  // When navigated from a team member page (/team/:userId/assessment/:id), use the member's
+  // userId directly; otherwise fall back to the impersonation-aware dataUserId.
+  const targetUserId = memberUserId || dataUserId;
+  const backLink = memberUserId ? `/team/${memberUserId}` : '/my';
+  const backLabel = memberUserId ? '← Back to team member' : '← Back to My Dashboard';
   const [assessment, setAssessment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!id || !dataUserId || !supabase) {
+    if (!id || !targetUserId || !supabase) {
       setLoading(false);
       return;
     }
-    supabase.from('skill_assessments').select('*').eq('id', id).eq('user_id', dataUserId).single()
+    supabase.from('skill_assessments').select('*').eq('id', id).eq('user_id', targetUserId).single()
       .then(({ data, error: e }) => {
         if (e) setError(e.message);
         else setAssessment(data);
       })
       .finally(() => setLoading(false));
-  }, [id, dataUserId]);
+  }, [id, targetUserId]);
 
   if (loading) return <div style={{ padding: '24px', color: '#334155' }}>Loading assessment…</div>;
   if (error || !assessment) {
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <Link to="/my" style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>← Back to My Dashboard</Link>
+        <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
         <p style={{ color: '#991b1b' }}>{error || 'Assessment not found.'}</p>
       </div>
     );
@@ -41,7 +46,7 @@ export default function AssessmentDetail() {
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <Link to="/my" style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>← Back to My Dashboard</Link>
+      <Link to={backLink} style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>{backLabel}</Link>
 
       <div style={{ ...cardStyle, marginBottom: '24px' }}>
         <h2 style={{ marginTop: 0, marginBottom: '8px' }}>{assessment.meeting_title || 'Untitled meeting'}</h2>
