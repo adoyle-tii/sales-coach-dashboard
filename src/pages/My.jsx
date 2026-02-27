@@ -202,19 +202,30 @@ export default function My() {
                               );
                               return { ...fa, milestones: nextMilestones };
                             });
+                            // Optimistically update UI immediately
+                            setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: now } : null));
                             // #region agent log
-                            fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone',message:'toggle start',data:{pdpId:pdp?.id,dataUserId,milestoneJ:j,focusAreaI:i,toStatus:isCompleted?'open':'completed'},hypothesisId:'A',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+                            fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone',message:'toggle via worker API',data:{pdpId:pdp?.id,dataUserId,milestoneJ:j,focusAreaI:i,toStatus:isCompleted?'open':'completed'},hypothesisId:'A',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
                             // #endregion
-                            const { error, data } = await supabase
-                              .from('development_plans')
-                              .update({ focus_areas: nextFocusAreas, last_updated: new Date().toISOString() })
-                              .eq('id', pdp.id)
-                              .eq('user_id', dataUserId)
-                              .select();
-                            // #region agent log
-                            fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone-result',message:'supabase update result',data:{errorMsg:error?.message,errorCode:error?.code,errorDetails:error?.details,rowsReturned:Array.isArray(data)?data.length:data},hypothesisId:'A',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-                            // #endregion
-                            if (!error) setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: new Date().toISOString() } : null));
+                            try {
+                              const { data: { session } } = await supabase.auth.getSession();
+                              const token = session?.access_token;
+                              const res = await fetch(`${WORKER_URL}/pdp/seller-update`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                                body: JSON.stringify({ sellerId: dataUserId, focusAreas: nextFocusAreas })
+                              });
+                              // #region agent log
+                              fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone-result',message:'worker API result',data:{status:res.status,ok:res.ok},hypothesisId:'A',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
+                              // #endregion
+                              if (!res.ok) {
+                                // Revert optimistic update on failure
+                                setPdp((prev) => (prev ? { ...prev, focus_areas: pdp.focus_areas, last_updated: pdp.last_updated } : null));
+                              }
+                            } catch {
+                              // Revert on network error
+                              setPdp((prev) => (prev ? { ...prev, focus_areas: pdp.focus_areas, last_updated: pdp.last_updated } : null));
+                            }
                           };
                           return (
                             <li key={milestone.id || j} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
@@ -265,11 +276,16 @@ export default function My() {
                           const nextFocusAreas = pdp.focus_areas.map((fa, fi) =>
                             fi === i ? { ...fa, seller_notes: value } : fa
                           );
-                          await supabase
-                            .from('development_plans')
-                            .update({ focus_areas: nextFocusAreas, last_updated: new Date().toISOString() })
-                            .eq('user_id', dataUserId);
                           setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: new Date().toISOString() } : null));
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const token = session?.access_token;
+                            await fetch(`${WORKER_URL}/pdp/seller-update`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                              body: JSON.stringify({ sellerId: dataUserId, focusAreas: nextFocusAreas })
+                            });
+                          } catch { /* best-effort */ }
                         }}
                         placeholder="Add notes, progress, or reflections for your manager…"
                         rows={2}
