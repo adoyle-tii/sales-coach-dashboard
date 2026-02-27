@@ -41,11 +41,37 @@ export default function TeamMember() {
   const exhibited = actionItems.filter((a) => a.status === 'exhibited');
   const completed = actionItems.filter((a) => a.status === 'completed');
 
+  const pdpProgress = (() => {
+    if (!pdp?.focus_areas?.length) return null;
+    let total = 0, completedM = 0, sectionsComplete = 0;
+    pdp.focus_areas.forEach((area) => {
+      const milestones = (area && area.milestones) || [];
+      total += milestones.length;
+      const c = milestones.filter((m) => m.status === 'completed').length;
+      completedM += c;
+      if (milestones.length > 0 && c === milestones.length) sectionsComplete += 1;
+    });
+    return { total, completed: completedM, sectionsTotal: pdp.focus_areas.length, sectionsComplete };
+  })();
+
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <Link to="/team" style={{ display: 'inline-block', marginBottom: '16px', color: '#4f46e5', textDecoration: 'none' }}>← Back to team</Link>
       <h2 style={{ marginTop: 0 }}>{member.full_name || member.email}</h2>
       <p style={{ color: '#64748b', marginBottom: '24px' }}>{member.email}</p>
+
+      {pdpProgress && pdpProgress.total > 0 && (
+        <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
+          <strong style={{ fontSize: '0.8rem', color: '#475569' }}>Development plan progress</strong>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginTop: '6px', fontSize: '0.875rem' }}>
+            <span>Milestones: {pdpProgress.completed}/{pdpProgress.total} complete</span>
+            <span>Sections: {pdpProgress.sectionsComplete}/{pdpProgress.sectionsTotal} complete</span>
+            {pdpProgress.completed === pdpProgress.total && pdpProgress.total > 0 && (
+              <span style={{ color: '#16a34a', fontWeight: 600 }}>All complete</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <section style={{ marginBottom: '32px' }}>
         <h3>Assessment history</h3>

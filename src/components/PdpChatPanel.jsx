@@ -108,18 +108,46 @@ export default function PdpChatPanel({ userId, memberName, pdp, onPlanSaved }) {
             {pdp.manager_notes && <p style={{ margin: '0 0 12px', fontSize: '0.9rem' }}><strong>Manager notes:</strong> {pdp.manager_notes}</p>}
             {pdp.focus_areas && pdp.focus_areas.length > 0 && (
               <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                {pdp.focus_areas.map((f, i) => (
-                  <li key={i} style={{ marginBottom: '6px' }}>
-                    {typeof f === 'string' ? f : (f.skill || f.goal || f.name || JSON.stringify(f))}
-                    {typeof f === 'object' && f.milestones?.length > 0 && (
-                      <ul style={{ marginTop: '4px', paddingLeft: '16px', fontSize: '0.875rem', color: '#64748b' }}>
-                        {f.milestones.map((m, j) => (
-                          <li key={j}>{m.text} {m.due_date ? `(by ${m.due_date})` : ''}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
+                {pdp.focus_areas.map((f, i) => {
+                  const area = typeof f === 'object' && f !== null ? f : null;
+                  const milestones = area?.milestones || [];
+                  const allComplete = milestones.length > 0 && milestones.every((m) => m.status === 'completed');
+                  const sellerNotes = area?.seller_notes?.trim();
+                  return (
+                    <li key={area?.id || i} style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {typeof f === 'string' ? (
+                          f
+                        ) : (
+                          <>
+                            <span>{area?.skill || area?.goal || area?.name || JSON.stringify(f)}</span>
+                            {allComplete && (
+                              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px' }}>
+                                Section complete
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {area?.milestones?.length > 0 && (
+                        <ul style={{ marginTop: '4px', paddingLeft: '16px', fontSize: '0.875rem', color: '#64748b' }}>
+                          {area.milestones.map((m, j) => (
+                            <li key={m.id || j}>
+                              {m.status === 'completed' && <span style={{ color: '#16a34a', marginRight: '4px' }}>✓ </span>}
+                              {m.text} {m.due_date ? `(by ${m.due_date})` : ''}
+                              {m.status === 'completed' ? ' — Completed' : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {sellerNotes && (
+                        <div style={{ marginTop: '8px', padding: '8px 10px', background: '#f8fafc', borderRadius: '6px', borderLeft: '3px solid #94a3b8', fontSize: '0.85rem', color: '#475569' }}>
+                          <strong>Seller notes:</strong> {sellerNotes}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {pdp.last_updated && <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '12px', marginBottom: 0 }}>Last updated {new Date(pdp.last_updated).toLocaleString()}</p>}
@@ -147,27 +175,39 @@ export default function PdpChatPanel({ userId, memberName, pdp, onPlanSaved }) {
       <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '16px' }}>Building a plan for {memberName || 'this seller'}. The AI has access to their assessments, coaching sessions, and open action items.</p>
       <div style={{ display: 'grid', gridTemplateColumns: suggestedPlan?.focus_areas?.length ? '1fr 320px' : '1fr', gap: '24px' }}>
         <div>
-          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '12px', marginBottom: '12px', background: '#f8fafc' }}>
+          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px', marginBottom: '12px', background: '#f8fafc' }}>
             {messages.length === 0 && (
               <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>Send a message to start (e.g. &quot;Let&apos;s build a development plan for this quarter&quot;).</p>
             )}
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  marginBottom: '12px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  background: m.role === 'user' ? '#eef2ff' : '#fff',
-                  borderLeft: m.role === 'user' ? '4px solid #4f46e5' : '4px solid #94a3b8',
-                  whiteSpace: 'pre-wrap',
-                  fontSize: '0.9rem'
-                }}
-              >
-                <strong style={{ fontSize: '0.7rem', color: '#64748b' }}>{m.role === 'user' ? 'You' : 'AI'}</strong>
-                <div style={{ marginTop: '4px' }}>{m.content}</div>
-              </div>
-            ))}
+            {messages.map((m, i) => {
+              const isUser = m.role === 'user';
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: isUser ? 'flex-end' : 'flex-start',
+                    marginBottom: '10px'
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: '85%',
+                      padding: '10px 14px',
+                      borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      background: isUser ? '#007AFF' : '#e5e7eb',
+                      color: isUser ? '#fff' : '#1e293b',
+                      whiteSpace: 'pre-wrap',
+                      fontSize: '0.9rem',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.08)'
+                    }}
+                  >
+                    <strong style={{ fontSize: '0.7rem', opacity: 0.9 }}>{isUser ? 'You' : 'AI'}</strong>
+                    <div style={{ marginTop: '4px' }}>{m.content}</div>
+                  </div>
+                </div>
+              );
+            })}
             {loading && <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Thinking…</div>}
             <div ref={messagesEndRef} />
           </div>

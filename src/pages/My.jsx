@@ -150,7 +150,7 @@ export default function My() {
                       borderLeftColor: area.priority === 'high' ? '#dc2626' : area.priority === 'medium' ? '#ca8a04' : '#64748b'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           fontSize: '0.7rem',
@@ -165,6 +165,11 @@ export default function My() {
                         {area.priority || 'focus'}
                       </span>
                       <strong style={{ fontSize: '1rem' }}>{area.skill || area.name || `Focus ${i + 1}`}</strong>
+                      {area.milestones?.length > 0 && area.milestones.every((m) => m.status === 'completed') && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px' }}>
+                          Section complete
+                        </span>
+                      )}
                     </div>
                     <p style={{ margin: '0 0 6px', fontSize: '0.9rem' }}>{area.goal}</p>
                     {area.why && <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#64748b' }}>{area.why}</p>}
@@ -203,6 +208,39 @@ export default function My() {
                         })}
                       </ul>
                     )}
+                    <div style={{ marginTop: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                        Your updates / reflections
+                      </label>
+                      <textarea
+                        value={area.seller_notes || ''}
+                        onChange={(e) => {
+                          setPdp((prev) => {
+                            if (!prev) return prev;
+                            return {
+                              ...prev,
+                              focus_areas: prev.focus_areas.map((fa, fi) =>
+                                fi === i ? { ...fa, seller_notes: e.target.value } : fa
+                              )
+                            };
+                          });
+                        }}
+                        onBlur={async (e) => {
+                          const value = (e.target.value || '').trim();
+                          const nextFocusAreas = pdp.focus_areas.map((fa, fi) =>
+                            fi === i ? { ...fa, seller_notes: value } : fa
+                          );
+                          await supabase
+                            .from('development_plans')
+                            .update({ focus_areas: nextFocusAreas, last_updated: new Date().toISOString() })
+                            .eq('user_id', dataUserId);
+                          setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: new Date().toISOString() } : null));
+                        }}
+                        placeholder="Add notes, progress, or reflections for your manager…"
+                        rows={2}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                    </div>
                   </div>
                 );
                 })}
