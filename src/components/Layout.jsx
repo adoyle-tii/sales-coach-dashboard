@@ -1,43 +1,87 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
+
+function Avatar({ name, size = '' }) {
+  const initials = (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  return <div className={`avatar ${size}`}>{initials}</div>;
+}
 
 export default function Layout({ user, profile, onSignOut }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { viewProfile, isImpersonating, exitImpersonation, realProfile } = useImpersonation();
   const displayProfile = viewProfile ?? profile;
+  const isAdmin = realProfile?.role === 'superadmin' || (realProfile?.role === 'admin' && realProfile?.can_impersonate);
+  const isManager = realProfile?.role === 'manager' || realProfile?.role === 'admin' || realProfile?.role === 'superadmin';
+
+  const active = (path) => location.pathname.startsWith(path) ? 'active' : '';
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {isImpersonating && (
-        <div style={{ padding: '8px 24px', background: '#fef3c7', color: '#92400e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-          <span>Impersonating: <strong>{displayProfile?.full_name || 'Unknown user'}</strong></span>
-          <button type="button" onClick={() => { exitImpersonation(); navigate('/admin'); }} style={{ padding: '4px 12px', cursor: 'pointer', background: '#fcd34d', border: 'none', borderRadius: '4px', fontWeight: 600 }}>
-            Exit impersonation
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-text">
+            <div className="sidebar-logo-icon">🎯</div>
+            Sales Coach
+          </div>
+        </div>
+
+        <nav className="sidebar-nav">
+          <div className="sidebar-section-label">Navigation</div>
+          <Link to="/my" className={active('/my')}>
+            <span className="nav-icon">🏠</span> My Dashboard
+          </Link>
+          {isManager && (
+            <Link to="/team" className={active('/team')}>
+              <span className="nav-icon">👥</span> Team
+            </Link>
+          )}
+          {isAdmin && (
+            <Link to="/admin" className={active('/admin')}>
+              <span className="nav-icon">⚙️</span> Admin
+            </Link>
+          )}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <Avatar name={displayProfile?.full_name || user?.email} size="avatar-sm" />
+            <div style={{ minWidth: 0 }}>
+              <div className="sidebar-user-name">{displayProfile?.full_name || user?.email}</div>
+              <div className="sidebar-user-role">{displayProfile?.role || 'rep'}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="nav-btn"
+            onClick={() => { onSignOut(); navigate('/login'); }}
+            style={{ marginTop: '4px', color: '#94a3b8' }}
+          >
+            <span className="nav-icon">↩</span> Sign out
           </button>
         </div>
-      )}
-      <header style={{ padding: '12px 24px', background: '#1e293b', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: '1.25rem' }}>Sales Coach</h1>
-        <nav style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <Link to="/my" style={{ color: 'white', textDecoration: 'none' }}>My Dashboard</Link>
-          {displayProfile?.role === 'manager' && (
-            <Link to="/team" style={{ color: 'white', textDecoration: 'none' }}>Team</Link>
-          )}
-          {realProfile?.role === 'superadmin' && (
-            <Link to="/admin" style={{ color: '#fcd34d', textDecoration: 'none', fontWeight: 600 }}>Admin</Link>
-          )}
-          {(realProfile?.role === 'admin' && realProfile?.can_impersonate) && (
-            <Link to="/admin" style={{ color: '#c4b5fd', textDecoration: 'none', fontWeight: 600 }}>Admin</Link>
-          )}
-          <span style={{ fontSize: '0.875rem', opacity: 0.9 }}>{displayProfile?.full_name || user?.email}</span>
-          <button type="button" onClick={() => { onSignOut(); navigate('/login'); }} style={{ padding: '6px 12px', cursor: 'pointer' }}>
-            Sign out
-          </button>
-        </nav>
-      </header>
-      <main style={{ flex: 1, padding: '24px' }}>
-        <Outlet />
-      </main>
+      </aside>
+
+      <div className="main-content">
+        {isImpersonating && (
+          <div className="impersonation-banner">
+            <span>
+              👁 Viewing as <strong>{displayProfile?.full_name || 'user'}</strong>
+              {displayProfile?.role && <span style={{ marginLeft: 6, opacity: 0.7 }}>({displayProfile.role})</span>}
+            </span>
+            <button
+              type="button"
+              className="btn btn-exit btn-sm"
+              onClick={() => { exitImpersonation(); navigate('/admin'); }}
+            >
+              Exit impersonation
+            </button>
+          </div>
+        )}
+        <div className="page-content">
+          <Outlet />
+        </div>
+      </div>
     </div>
   );
 }
