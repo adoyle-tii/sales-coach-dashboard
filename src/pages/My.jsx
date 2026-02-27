@@ -10,6 +10,8 @@ export default function My() {
   const [assessments, setAssessments] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [pdp, setPdp] = useState(null);
+  const [pastPlans, setPastPlans] = useState([]);
+  const [pastPlansOpen, setPastPlansOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,11 +24,23 @@ export default function My() {
         const [aRes, sRes, pRes] = await Promise.all([
           supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', dataUserId).order('created_at', { ascending: false }).limit(50),
           supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', dataUserId).order('session_date', { ascending: false }).limit(20),
-          supabase.from('development_plans').select('*').eq('user_id', dataUserId).single()
+          supabase.from('development_plans').select('*').eq('user_id', dataUserId).eq('status', 'active').limit(1)
         ]);
         setAssessments(aRes?.data ?? []);
         setSessions(sRes?.data ?? []);
-        setPdp(pRes?.data ?? null);
+        setPdp(pRes?.data?.[0] ?? null);
+        // Fetch past plans separately
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          const hRes = await fetch(`${WORKER_URL}/pdp/history?sellerId=${encodeURIComponent(dataUserId)}`, {
+            headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+          });
+          if (hRes.ok) {
+            const h = await hRes.json().catch(() => []);
+            setPastPlans(Array.isArray(h) ? h : []);
+          }
+        } catch { /* silently ignore past plans error */ }
       } catch (e) {
         setAssessments([]);
         setSessions([]);
@@ -267,6 +281,78 @@ export default function My() {
           <p style={{ color: '#64748b' }}>No development plan yet. Complete assessments and coaching to see focus areas here.</p>
         )}
       </section>
+
+      {(pastPlans.length > 0) && (
+        <section style={{ marginBottom: '32px' }}>
+          <button
+            type="button"
+            onClick={() => setPastPlansOpen((o) => !o)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', fontWeight: 700, color: '#334155' }}
+          >
+            <span>{pastPlansOpen ? '▾' : '▸'}</span>
+            <h3 style={{ margin: 0, fontWeight: 700 }}>Past development plans ({pastPlans.length})</h3>
+          </button>
+          {pastPlansOpen && (
+            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {pastPlans.map((plan, pi) => {
+                const completedDate = plan.completed_at
+                  ? (() => { try { const d = new Date(plan.completed_at); return isNaN(d.getTime()) ? 'unknown' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return 'unknown'; } })()
+                  : 'unknown';
+                return (
+                  <div key={plan.id || pi} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 16px', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+                      <strong style={{ fontSize: '0.875rem' }}>Plan completed {completedDate}</strong>
+                      {plan.completion_notes && (
+                        <p style={{ margin: '6px 0 0', fontSize: '0.875rem', color: '#475569', padding: '8px 10px', background: '#e0f2fe', borderRadius: '6px', borderLeft: '3px solid #0ea5e9' }}>
+                          <strong>Manager reflection:</strong> {plan.completion_notes}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {Array.isArray(plan.focus_areas) && plan.focus_areas.map((area, ai) => {
+                        if (typeof area === 'string') return <div key={ai} style={{ fontSize: '0.9rem', color: '#475569' }}>{area}</div>;
+                        const milestones = area.milestones || [];
+                        const allDone = milestones.length > 0 && milestones.every((m) => m.status === 'completed');
+                        return (
+                          <div key={area.id || ai} style={{ padding: '12px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <strong style={{ fontSize: '0.9rem' }}>{area.skill || area.name || `Focus ${ai + 1}`}</strong>
+                              {allDone && <span style={{ fontSize: '0.7rem', color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>Completed</span>}
+                            </div>
+                            {area.goal && <p style={{ margin: '0 0 6px', fontSize: '0.875rem', color: '#475569' }}>{area.goal}</p>}
+                            {milestones.length > 0 && (
+                              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                                {milestones.map((m, mi) => {
+                                  const done = m.status === 'completed';
+                                  const cDate = m.completed_at ? (() => { try { const d = new Date(m.completed_at); return isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } })() : '';
+                                  return (
+                                    <li key={m.id || mi} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '4px', fontSize: '0.875rem' }}>
+                                      <span style={{ color: done ? '#16a34a' : '#94a3b8', flexShrink: 0 }}>{done ? '✓' : '○'}</span>
+                                      <span style={{ textDecoration: done ? 'line-through' : 'none', color: done ? '#64748b' : 'inherit' }}>
+                                        {m.text}
+                                        {done && cDate && <span style={{ fontSize: '0.8rem', color: '#16a34a', marginLeft: '6px' }}>— {cDate}</span>}
+                                      </span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                            {area.seller_notes?.trim() && (
+                              <div style={{ marginTop: '8px', padding: '8px 10px', background: 'white', borderRadius: '4px', borderLeft: '3px solid #94a3b8', fontSize: '0.85rem', color: '#475569' }}>
+                                <strong>Your notes:</strong> {area.seller_notes.trim()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

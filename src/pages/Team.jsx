@@ -33,8 +33,9 @@ export default function Team() {
         }
         const { data: plans } = await supabase
           .from('development_plans')
-          .select('user_id, focus_areas, last_updated')
-          .in('user_id', list.map((m) => m.id));
+          .select('user_id, focus_areas, last_updated, status')
+          .in('user_id', list.map((m) => m.id))
+          .eq('status', 'active');
         const byUser = {};
         (plans ?? []).forEach((p) => {
           byUser[p.user_id] = p;
@@ -84,6 +85,7 @@ export default function Team() {
                 <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '8px' }}>{m.email}</div>
                 {progress.total > 0 ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', fontSize: '0.8rem' }}>
+                    <span style={{ color: '#16a34a', fontWeight: 600, background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px' }}>Active plan</span>
                     <span style={{ color: '#475569' }}>
                       <strong>Milestones:</strong> {progress.completed}/{progress.total} complete
                     </span>
@@ -93,11 +95,13 @@ export default function Team() {
                       </span>
                     )}
                     {progress.total === progress.completed && progress.total > 0 && (
-                      <span style={{ color: '#16a34a', fontWeight: 600 }}>All complete</span>
+                      <span style={{ color: '#16a34a', fontWeight: 600 }}>All complete — ready to close</span>
                     )}
                   </div>
                 ) : (
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No development plan yet</div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No active development plan</span>
+                  </div>
                 )}
               </li>
             );

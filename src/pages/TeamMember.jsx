@@ -23,13 +23,13 @@ export default function TeamMember() {
         supabase.from('skill_assessments').select('id, meeting_title, created_at, overall_score, skill_scores').eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
         supabase.from('coaching_sessions').select('id, session_date, session_summary').eq('user_id', userId).order('session_date', { ascending: false }).limit(20),
         supabase.from('action_items').select('id, description, status, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
-        supabase.from('development_plans').select('*').eq('user_id', userId).single()
+        supabase.from('development_plans').select('*').eq('user_id', userId).eq('status', 'active').limit(1)
       ]);
       setMember(uRes?.data || null);
       setAssessments(aRes?.data || []);
       setSessions(sRes?.data || []);
       setActionItems(aiRes?.data || []);
-      setPdp(pRes?.data || null);
+      setPdp(pRes?.data?.[0] || null);
       setLoading(false);
     })();
   }, [userId]);
@@ -140,8 +140,8 @@ export default function TeamMember() {
           memberName={member.full_name || member.email}
           pdp={pdp}
           onPlanSaved={async () => {
-            const { data } = await supabase.from('development_plans').select('*').eq('user_id', userId).single();
-            setPdp(data || null);
+            const { data } = await supabase.from('development_plans').select('*').eq('user_id', userId).eq('status', 'active').limit(1);
+            setPdp(data?.[0] || null);
           }}
         />
       </section>
