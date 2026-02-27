@@ -100,55 +100,104 @@ export default function PdpChatPanel({ userId, memberName, pdp, onPlanSaved }) {
   };
 
   if (state === 'idle') {
+    const formatCompletedDate = (completedAt) => {
+      if (!completedAt) return null;
+      try {
+        const d = new Date(completedAt);
+        return isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      } catch {
+        return null;
+      }
+    };
+
     return (
       <div style={cardStyle}>
         <div style={sectionHeading}>Development plan</div>
         {pdp && (pdp.focus_areas?.length > 0 || pdp.manager_notes) ? (
           <>
-            {pdp.manager_notes && <p style={{ margin: '0 0 12px', fontSize: '0.9rem' }}><strong>Manager notes:</strong> {pdp.manager_notes}</p>}
+            {pdp.manager_notes && (
+              <p style={{ margin: '0 0 16px', fontSize: '0.9rem', padding: '10px', background: '#f8fafc', borderRadius: '6px', borderLeft: '4px solid #e2e8f0' }}>
+                <strong>Manager notes:</strong> {pdp.manager_notes}
+              </p>
+            )}
             {pdp.focus_areas && pdp.focus_areas.length > 0 && (
-              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {pdp.focus_areas.map((f, i) => {
                   const area = typeof f === 'object' && f !== null ? f : null;
-                  const milestones = area?.milestones || [];
+                  if (typeof f === 'string' || !area?.skill && !area?.goal) {
+                    return (
+                      <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
+                        {typeof f === 'string' ? f : (area?.name || JSON.stringify(f))}
+                      </div>
+                    );
+                  }
+                  const milestones = area.milestones || [];
                   const allComplete = milestones.length > 0 && milestones.every((m) => m.status === 'completed');
-                  const sellerNotes = area?.seller_notes?.trim();
+                  const sellerNotes = area.seller_notes?.trim();
                   return (
-                    <li key={area?.id || i} style={{ marginBottom: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {typeof f === 'string' ? (
-                          f
-                        ) : (
-                          <>
-                            <span>{area?.skill || area?.goal || area?.name || JSON.stringify(f)}</span>
-                            {allComplete && (
-                              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px' }}>
-                                Section complete
-                              </span>
-                            )}
-                          </>
+                    <div
+                      key={area.id || i}
+                      style={{
+                        padding: '16px',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        borderLeftWidth: '4px',
+                        borderLeftColor: area.priority === 'high' ? '#dc2626' : area.priority === 'medium' ? '#ca8a04' : '#64748b'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: area.priority === 'high' ? '#fef2f2' : area.priority === 'medium' ? '#fefce8' : '#f1f5f9',
+                            color: area.priority === 'high' ? '#991b1b' : area.priority === 'medium' ? '#854d0e' : '#475569'
+                          }}
+                        >
+                          {area.priority || 'focus'}
+                        </span>
+                        <strong style={{ fontSize: '1rem' }}>{area.skill || area.name || `Focus ${i + 1}`}</strong>
+                        {allComplete && (
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: '4px' }}>
+                            Section complete
+                          </span>
                         )}
                       </div>
-                      {area?.milestones?.length > 0 && (
-                        <ul style={{ marginTop: '4px', paddingLeft: '16px', fontSize: '0.875rem', color: '#64748b' }}>
-                          {area.milestones.map((m, j) => (
-                            <li key={m.id || j}>
-                              {m.status === 'completed' && <span style={{ color: '#16a34a', marginRight: '4px' }}>✓ </span>}
-                              {m.text} {m.due_date ? `(by ${m.due_date})` : ''}
-                              {m.status === 'completed' ? ' — Completed' : ''}
-                            </li>
-                          ))}
+                      <p style={{ margin: '0 0 6px', fontSize: '0.9rem' }}>{area.goal}</p>
+                      {area.why && <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#64748b' }}>{area.why}</p>}
+                      {milestones.length > 0 && (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                          {milestones.map((m, j) => {
+                            const isCompleted = m.status === 'completed';
+                            const completedDate = formatCompletedDate(m.completed_at);
+                            return (
+                              <li key={m.id || j} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px', fontSize: '0.9rem' }}>
+                                <span style={{ color: isCompleted ? '#16a34a' : '#94a3b8', flexShrink: 0 }}>{isCompleted ? '✓' : '○'}</span>
+                                <span style={{ textDecoration: isCompleted ? 'line-through' : 'none', color: isCompleted ? '#64748b' : 'inherit' }}>
+                                  {m.text}
+                                  {m.due_date && <span style={{ fontSize: '0.8rem', color: '#64748b', marginLeft: '6px' }}>(due {m.due_date})</span>}
+                                  {isCompleted && completedDate && (
+                                    <span style={{ fontSize: '0.8rem', color: '#16a34a', marginLeft: '8px' }}>— Completed {completedDate}</span>
+                                  )}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                       {sellerNotes && (
-                        <div style={{ marginTop: '8px', padding: '8px 10px', background: '#f8fafc', borderRadius: '6px', borderLeft: '3px solid #94a3b8', fontSize: '0.85rem', color: '#475569' }}>
+                        <div style={{ marginTop: '12px', padding: '10px 12px', background: 'white', borderRadius: '6px', borderLeft: '3px solid #94a3b8', fontSize: '0.85rem', color: '#475569' }}>
                           <strong>Seller notes:</strong> {sellerNotes}
                         </div>
                       )}
-                    </li>
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
             )}
             {pdp.last_updated && <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '12px', marginBottom: 0 }}>Last updated {new Date(pdp.last_updated).toLocaleString()}</p>}
           </>

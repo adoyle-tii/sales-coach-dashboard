@@ -178,10 +178,13 @@ export default function My() {
                         {area.milestones.map((milestone, j) => {
                           const isCompleted = milestone.status === 'completed';
                           const toggleMilestone = async () => {
+                            const now = new Date().toISOString();
                             const nextFocusAreas = pdp.focus_areas.map((fa, fi) => {
                               if (fi !== i) return fa;
                               const nextMilestones = (fa.milestones || []).map((m, mj) =>
-                                mj === j ? { ...m, status: isCompleted ? 'open' : 'completed' } : m
+                                mj === j
+                                  ? { ...m, status: isCompleted ? 'open' : 'completed', completed_at: isCompleted ? null : now }
+                                  : m
                               );
                               return { ...fa, milestones: nextMilestones };
                             });
@@ -202,6 +205,16 @@ export default function My() {
                               <span style={{ textDecoration: isCompleted ? 'line-through' : 'none', color: isCompleted ? '#64748b' : 'inherit', fontSize: '0.9rem' }}>
                                 {milestone.text}
                                 {milestone.due_date && <span style={{ fontSize: '0.8rem', color: '#64748b', marginLeft: '6px' }}>(by {milestone.due_date})</span>}
+                                {isCompleted && milestone.completed_at && (
+                                  <span style={{ fontSize: '0.8rem', color: '#16a34a', marginLeft: '8px' }}>
+                                    — Completed {(() => {
+                                      try {
+                                        const d = new Date(milestone.completed_at);
+                                        return isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                                      } catch { return ''; }
+                                    })()}
+                                  </span>
+                                )}
                               </span>
                             </li>
                           );
