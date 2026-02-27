@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import PdpChatPanel from '../components/PdpChatPanel';
 
 export default function TeamMember() {
   const { userId } = useParams();
@@ -108,18 +109,15 @@ export default function TeamMember() {
       </section>
 
       <section>
-        <h3>Development plan</h3>
-        {pdp ? (
-          <div style={{ padding: '16px', background: 'white', borderRadius: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            {pdp.manager_notes && <p><strong>Manager notes:</strong> {pdp.manager_notes}</p>}
-            {pdp.focus_areas && pdp.focus_areas.length > 0 && (
-              <ul>{pdp.focus_areas.map((f, i) => <li key={i}>{typeof f === 'string' ? f : f?.name || JSON.stringify(f)}</li>)}</ul>
-            )}
-            {(!pdp.focus_areas || pdp.focus_areas.length === 0) && !pdp.manager_notes && <p style={{ color: '#64748b' }}>No plan content yet.</p>}
-          </div>
-        ) : (
-          <p style={{ color: '#64748b' }}>No development plan yet.</p>
-        )}
+        <PdpChatPanel
+          userId={userId}
+          memberName={member.full_name || member.email}
+          pdp={pdp}
+          onPlanSaved={async () => {
+            const { data } = await supabase.from('development_plans').select('*').eq('user_id', userId).single();
+            setPdp(data || null);
+          }}
+        />
       </section>
     </div>
   );

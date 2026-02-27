@@ -117,16 +117,99 @@ export default function My() {
       <section>
         <h3>Personal development plan</h3>
         {pdp ? (
-          <div style={{ padding: '16px', background: 'white', borderRadius: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            {pdp.focus_areas && pdp.focus_areas.length > 0 && (
-              <div>
-                <strong>Focus areas</strong>
-                <ul>{pdp.focus_areas.map((f, i) => <li key={i}>{typeof f === 'string' ? f : f?.name || JSON.stringify(f)}</li>)}</ul>
-              </div>
+          <div style={{ padding: '16px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            {pdp.last_updated && (
+              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 0, marginBottom: '12px' }}>
+                Last updated {new Date(pdp.last_updated).toLocaleString()}. Plan set by your manager.
+              </p>
             )}
-            {pdp.manager_notes && <p><strong>Manager notes:</strong> {pdp.manager_notes}</p>}
+            {pdp.manager_notes && (
+              <p style={{ marginBottom: '16px', fontSize: '0.9rem', padding: '10px', background: '#f8fafc', borderRadius: '6px', borderLeft: '4px solid #e2e8f0' }}>
+                <strong>Manager notes:</strong> {pdp.manager_notes}
+              </p>
+            )}
+            {pdp.focus_areas && pdp.focus_areas.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {pdp.focus_areas.map((area, i) => {
+                  if (typeof area === 'string' || (area && !area.skill && !area.goal)) {
+                    return (
+                      <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
+                        {typeof area === 'string' ? area : (area?.name || JSON.stringify(area))}
+                      </div>
+                    );
+                  }
+                  return (
+                  <div
+                    key={area.id || i}
+                    style={{
+                      padding: '16px',
+                      background: '#f8fafc',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                      borderLeftWidth: '4px',
+                      borderLeftColor: area.priority === 'high' ? '#dc2626' : area.priority === 'medium' ? '#ca8a04' : '#64748b'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: area.priority === 'high' ? '#fef2f2' : area.priority === 'medium' ? '#fefce8' : '#f1f5f9',
+                          color: area.priority === 'high' ? '#991b1b' : area.priority === 'medium' ? '#854d0e' : '#475569'
+                        }}
+                      >
+                        {area.priority || 'focus'}
+                      </span>
+                      <strong style={{ fontSize: '1rem' }}>{area.skill || area.name || `Focus ${i + 1}`}</strong>
+                    </div>
+                    <p style={{ margin: '0 0 6px', fontSize: '0.9rem' }}>{area.goal}</p>
+                    {area.why && <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#64748b' }}>{area.why}</p>}
+                    {area.milestones && area.milestones.length > 0 && (
+                      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                        {area.milestones.map((milestone, j) => {
+                          const isCompleted = milestone.status === 'completed';
+                          const toggleMilestone = async () => {
+                            const nextFocusAreas = pdp.focus_areas.map((fa, fi) => {
+                              if (fi !== i) return fa;
+                              const nextMilestones = (fa.milestones || []).map((m, mj) =>
+                                mj === j ? { ...m, status: isCompleted ? 'open' : 'completed' } : m
+                              );
+                              return { ...fa, milestones: nextMilestones };
+                            });
+                            const { error } = await supabase
+                              .from('development_plans')
+                              .update({ focus_areas: nextFocusAreas, last_updated: new Date().toISOString() })
+                              .eq('user_id', dataUserId);
+                            if (!error) setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: new Date().toISOString() } : null));
+                          };
+                          return (
+                            <li key={milestone.id || j} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isCompleted}
+                                onChange={toggleMilestone}
+                                style={{ marginTop: '4px', width: '18px', height: '18px', cursor: 'pointer' }}
+                              />
+                              <span style={{ textDecoration: isCompleted ? 'line-through' : 'none', color: isCompleted ? '#64748b' : 'inherit', fontSize: '0.9rem' }}>
+                                {milestone.text}
+                                {milestone.due_date && <span style={{ fontSize: '0.8rem', color: '#64748b', marginLeft: '6px' }}>(by {milestone.due_date})</span>}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+                })}
+              </div>
+            ) : null}
             {(!pdp.focus_areas || pdp.focus_areas.length === 0) && !pdp.manager_notes && (
-              <p style={{ color: '#64748b' }}>No PDP yet. Complete assessments and coaching sessions to build your plan.</p>
+              <p style={{ color: '#64748b', margin: 0 }}>No PDP yet. Complete assessments and coaching sessions so your manager can build your plan.</p>
             )}
           </div>
         ) : (
