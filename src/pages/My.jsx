@@ -202,10 +202,18 @@ export default function My() {
                               );
                               return { ...fa, milestones: nextMilestones };
                             });
-                            const { error } = await supabase
+                            // #region agent log
+                            fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone',message:'toggle start',data:{pdpId:pdp?.id,dataUserId,milestoneJ:j,focusAreaI:i,toStatus:isCompleted?'open':'completed'},hypothesisId:'A',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+                            // #endregion
+                            const { error, data } = await supabase
                               .from('development_plans')
                               .update({ focus_areas: nextFocusAreas, last_updated: new Date().toISOString() })
-                              .eq('user_id', dataUserId);
+                              .eq('id', pdp.id)
+                              .eq('user_id', dataUserId)
+                              .select();
+                            // #region agent log
+                            fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone-result',message:'supabase update result',data:{errorMsg:error?.message,errorCode:error?.code,errorDetails:error?.details,rowsReturned:Array.isArray(data)?data.length:data},hypothesisId:'A',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+                            // #endregion
                             if (!error) setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: new Date().toISOString() } : null));
                           };
                           return (
