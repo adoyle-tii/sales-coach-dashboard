@@ -22,29 +22,17 @@ export default function App() {
       return;
     }
 
-    // onAuthStateChange fires with SIGNED_IN after Supabase processes the
-    // OAuth redirect hash internally — this is the canonical way to handle it.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
       else setProfile(null);
       setLoading(false);
     });
-
-    // Also check for an existing session (page refresh, etc.)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      // Only set loading false here if we're not in an OAuth callback
-      // (onAuthStateChange will handle that case)
-      const isOAuthCallback = window.location.hash.includes('access_token') ||
-        window.location.search.includes('code=');
-      if (!isOAuthCallback) {
-        setUser(session?.user ?? null);
-        if (session?.user) fetchProfile(session.user.id);
-        else setProfile(null);
-        setLoading(false);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      else setProfile(null);
     });
-
     return () => subscription?.unsubscribe();
   }, []);
 
