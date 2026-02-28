@@ -24,14 +24,18 @@ function ScoreBar({ score, max = 5 }) {
 }
 
 function SpiderChart({ skills, max = 5 }) {
-  if (!skills || skills.length < 3) return null;
+  if (!skills || skills.length < 2) return null;
+  // Radar needs at least 3 axes — pad with a phantom axis if only 2 skills
+  const skills3 = skills.length === 2
+    ? [...skills, { skill: '', avg: 0, phantom: true }]
+    : skills;
 
   const size = 260;
   const cx = size / 2;
   const cy = size / 2;
-  const radius = 100;
+  const radius = 90;
   const levels = 5;
-  const n = skills.length;
+  const n = skills3.length;
 
   const angleFor = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
   const pointFor = (i, r) => ({
@@ -53,16 +57,15 @@ function SpiderChart({ skills, max = 5 }) {
   });
 
   // Data polygon
-  const dataPoints = skills.map(({ avg }, i) => pointFor(i, (Math.min(avg, max) / max) * radius));
+  const dataPoints = skills3.map(({ avg }, i) => pointFor(i, (Math.min(avg, max) / max) * radius));
   const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
 
   // Label positions — push outward past the ring
-  const labelPad = 22;
-  const labels = skills.map(({ skill, avg }, i) => {
+  const labelPad = 24;
+  const labels = skills3.map(({ skill, avg, phantom }, i) => {
     const pt = pointFor(i, radius + labelPad);
-    const angle = angleFor(i) * (180 / Math.PI);
     const anchor = Math.abs(Math.cos(angleFor(i))) < 0.1 ? 'middle' : Math.cos(angleFor(i)) > 0 ? 'start' : 'end';
-    return { x: pt.x, y: pt.y, skill, avg, anchor, angle };
+    return { x: pt.x, y: pt.y, skill, avg, anchor, phantom };
   });
 
   return (
@@ -87,12 +90,12 @@ function SpiderChart({ skills, max = 5 }) {
       })}
       {/* Data area */}
       <path d={dataPath} fill="rgba(124,58,237,0.15)" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round" />
-      {/* Data points */}
+      {/* Data points — skip phantom */}
       {dataPoints.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="4" fill="#7c3aed" stroke="white" strokeWidth="1.5" />
+        skills3[i].phantom ? null : <circle key={i} cx={p.x} cy={p.y} r="4" fill="#7c3aed" stroke="white" strokeWidth="1.5" />
       ))}
-      {/* Labels */}
-      {labels.map(({ x, y, skill, avg, anchor }, i) => (
+      {/* Labels — skip phantom */}
+      {labels.map(({ x, y, skill, avg, anchor, phantom }, i) => phantom ? null : (
         <g key={i}>
           <text x={x} y={y} fontSize="11" fontWeight="600" fill="#334155" textAnchor={anchor} dominantBaseline="middle">
             {skill.length > 18 ? skill.slice(0, 16) + '…' : skill}
