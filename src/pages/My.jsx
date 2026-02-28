@@ -25,15 +25,16 @@ function ScoreBar({ score, max = 5 }) {
 
 function SpiderChart({ skills, max = 5 }) {
   if (!skills || skills.length < 2) return null;
-  // Radar needs at least 3 axes — pad with a phantom axis if only 2 skills
+
+  // Radar needs ≥3 axes — pad with a phantom if only 2 skills
   const skills3 = skills.length === 2
     ? [...skills, { skill: '', avg: 0, phantom: true }]
     : skills;
 
-  const size = 260;
+  const size = 300;
   const cx = size / 2;
   const cy = size / 2;
-  const radius = 90;
+  const radius = 95;
   const levels = 5;
   const n = skills3.length;
 
@@ -42,69 +43,89 @@ function SpiderChart({ skills, max = 5 }) {
     x: cx + r * Math.cos(angleFor(i)),
     y: cy + r * Math.sin(angleFor(i)),
   });
+  const toPath = (pts) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
 
-  // Grid rings
   const rings = Array.from({ length: levels }, (_, l) => {
     const r = (radius * (l + 1)) / levels;
-    const pts = Array.from({ length: n }, (__, i) => pointFor(i, r));
-    return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
+    return toPath(Array.from({ length: n }, (__, i) => pointFor(i, r)));
   });
 
-  // Axis lines
   const axes = Array.from({ length: n }, (_, i) => {
-    const outer = pointFor(i, radius);
-    return `M${cx},${cy} L${outer.x.toFixed(2)},${outer.y.toFixed(2)}`;
+    const o = pointFor(i, radius);
+    return `M${cx},${cy} L${o.x.toFixed(2)},${o.y.toFixed(2)}`;
   });
 
-  // Data polygon
   const dataPoints = skills3.map(({ avg }, i) => pointFor(i, (Math.min(avg, max) / max) * radius));
-  const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
+  const dataPath = toPath(dataPoints);
 
-  // Label positions — push outward past the ring
-  const labelPad = 24;
+  const labelPad = 28;
   const labels = skills3.map(({ skill, avg, phantom }, i) => {
     const pt = pointFor(i, radius + labelPad);
-    const anchor = Math.abs(Math.cos(angleFor(i))) < 0.1 ? 'middle' : Math.cos(angleFor(i)) > 0 ? 'start' : 'end';
+    const cos = Math.cos(angleFor(i));
+    const anchor = Math.abs(cos) < 0.12 ? 'middle' : cos > 0 ? 'start' : 'end';
     return { x: pt.x, y: pt.y, skill, avg, anchor, phantom };
   });
 
+  // Score colour matching dashboard palette
+  const scoreColor = (v) => v >= 4 ? '#16a34a' : v >= 3 ? '#7c3aed' : v >= 2 ? '#d97706' : '#dc2626';
+
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible', display: 'block', margin: '0 auto' }}>
-      {/* Grid rings */}
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ width: '100%', maxWidth: '280px', height: 'auto', overflow: 'visible', display: 'block', margin: '0 auto' }}
+    >
+      {/* Alternating filled rings */}
       {rings.map((d, i) => (
-        <path key={i} d={d} fill={i % 2 === 0 ? '#f8fafc' : 'none'} stroke="#e2e8f0" strokeWidth="1" />
+        <path key={i} d={d}
+          fill={i % 2 === 0 ? 'rgba(241,245,249,0.8)' : 'rgba(248,250,252,0.4)'}
+          stroke="#e2e8f0" strokeWidth="1"
+        />
       ))}
-      {/* Axis lines */}
+      {/* Axis spokes */}
       {axes.map((d, i) => (
-        <path key={i} d={d} stroke="#e2e8f0" strokeWidth="1" />
+        <path key={i} d={d} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3 3" />
       ))}
-      {/* Score level labels on first axis */}
+      {/* Ring level numbers on rightmost axis */}
       {Array.from({ length: levels }, (_, l) => {
         const r = (radius * (l + 1)) / levels;
         const pt = pointFor(0, r);
         return (
-          <text key={l} x={pt.x + 4} y={pt.y - 3} fontSize="9" fill="#94a3b8" textAnchor="start">
+          <text key={l} x={pt.x + 5} y={pt.y} fontSize="8.5" fill="#94a3b8" dominantBaseline="middle">
             {l + 1}
           </text>
         );
       })}
-      {/* Data area */}
-      <path d={dataPath} fill="rgba(124,58,237,0.15)" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round" />
-      {/* Data points — skip phantom */}
-      {dataPoints.map((p, i) => (
-        skills3[i].phantom ? null : <circle key={i} cx={p.x} cy={p.y} r="4" fill="#7c3aed" stroke="white" strokeWidth="1.5" />
-      ))}
+      {/* Data fill */}
+      <path d={dataPath} fill="rgba(124,58,237,0.12)" stroke="none" />
+      {/* Data stroke */}
+      <path d={dataPath} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinejoin="round" />
+      {/* Vertex dots — skip phantom */}
+      {dataPoints.map((p, i) =>
+        skills3[i].phantom ? null : (
+          <circle key={i} cx={p.x} cy={p.y} r="5"
+            fill={scoreColor(skills3[i].avg)} stroke="white" strokeWidth="2"
+            style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))' }}
+          />
+        )
+      )}
       {/* Labels — skip phantom */}
-      {labels.map(({ x, y, skill, avg, anchor, phantom }, i) => phantom ? null : (
-        <g key={i}>
-          <text x={x} y={y} fontSize="11" fontWeight="600" fill="#334155" textAnchor={anchor} dominantBaseline="middle">
-            {skill.length > 18 ? skill.slice(0, 16) + '…' : skill}
-          </text>
-          <text x={x} y={y + 13} fontSize="10" fill="#7c3aed" textAnchor={anchor} dominantBaseline="middle" fontWeight="700">
-            {avg.toFixed(1)}
-          </text>
-        </g>
-      ))}
+      {labels.map(({ x, y, skill, avg, anchor, phantom }, i) =>
+        phantom ? null : (
+          <g key={i}>
+            <text x={x} y={y - 6} fontSize="10.5" fontWeight="600" fill="#334155"
+              textAnchor={anchor} dominantBaseline="middle"
+              style={{ fontFamily: '-apple-system, BlinkMacSystemFont, Inter, sans-serif' }}
+            >
+              {skill.length > 20 ? skill.slice(0, 18) + '…' : skill}
+            </text>
+            <text x={x} y={y + 9} fontSize="11" fontWeight="700"
+              fill={scoreColor(avg)} textAnchor={anchor} dominantBaseline="middle"
+            >
+              {avg.toFixed(1)}<tspan fontSize="8.5" fontWeight="500" fill="#94a3b8">/5</tspan>
+            </text>
+          </g>
+        )
+      )}
     </svg>
   );
 }
@@ -206,14 +227,14 @@ export default function My() {
         </div>
       </div>
 
-      <div className="two-col">
-        {/* Skills trend */}
-        <div className="card section">
+      <div className="two-col" style={{ alignItems: 'stretch' }}>
+        {/* Skills overview */}
+        <div className="card section" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
             <h2 className="card-title">Skills overview</h2>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>avg across {assessments.length} assessment{assessments.length !== 1 ? 's' : ''}</span>
+            <span className="badge badge-purple">{assessments.length} assessment{assessments.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="card-body">
+          <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             {avgScores.length > 0 ? (
               <>
                 <SpiderChart skills={avgScores} />
@@ -239,13 +260,13 @@ export default function My() {
         </div>
 
         {/* Recent coaching sessions */}
-        <div className="card section">
+        <div className="card section" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
             <h2 className="card-title">Coaching sessions</h2>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{sessions.length} total</span>
+            <span className="badge badge-slate">{sessions.length} total</span>
           </div>
           {sessions.length > 0 ? (
-            <div className="card-body-tight">
+            <div className="card-body-tight" style={{ flex: 1 }}>
               {sessions.slice(0, 5).map((s) => (
                 <div key={s.id} className="list-item">
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', marginTop: 6, flexShrink: 0 }} />
@@ -263,7 +284,7 @@ export default function My() {
               ))}
             </div>
           ) : (
-            <div className="card-body">
+            <div className="card-body" style={{ flex: 1 }}>
               <div className="empty-state" style={{ padding: '20px 0' }}>
                 <div className="empty-icon">💬</div>
                 <div>No coaching sessions yet.</div>
