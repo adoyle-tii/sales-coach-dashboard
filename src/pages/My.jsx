@@ -227,9 +227,9 @@ export default function My() {
         </div>
       </div>
 
-      <div className="two-col" style={{ alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '18px', marginBottom: '24px', alignItems: 'stretch' }}>
         {/* Skills overview */}
-        <div className="card section" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card-header">
             <h2 className="card-title">Skills overview</h2>
             <span className="badge badge-purple">{assessments.length} assessment{assessments.length !== 1 ? 's' : ''}</span>
@@ -260,7 +260,7 @@ export default function My() {
         </div>
 
         {/* Recent coaching sessions */}
-        <div className="card section" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card-header">
             <h2 className="card-title">Coaching sessions</h2>
             <span className="badge badge-slate">{sessions.length} total</span>
