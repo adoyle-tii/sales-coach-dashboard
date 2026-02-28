@@ -132,7 +132,7 @@ function buildTimeline(transcriptTurns, insights) {
   const insightCount = insights.length;
   const turnCount = transcriptTurns.length;
   // Build a map: after which turn index should we inject an insight?
-  const injectionPoints = new Set();
+  const injectionPoints = new Map();
   if (insightCount > 0) {
     for (let i = 0; i < insightCount; i++) {
       // Space them out: after turn at position Math.floor((i + 1) * turnCount / (insightCount + 1))
