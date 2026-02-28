@@ -85,16 +85,7 @@ function SpiderChart({ skills, max = 5 }) {
       {axes.map((d, i) => (
         <path key={i} d={d} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3 3" />
       ))}
-      {/* Ring level numbers on rightmost axis */}
-      {Array.from({ length: levels }, (_, l) => {
-        const r = (radius * (l + 1)) / levels;
-        const pt = pointFor(0, r);
-        return (
-          <text key={l} x={pt.x + 5} y={pt.y} fontSize="8.5" fill="#94a3b8" dominantBaseline="middle">
-            {l + 1}
-          </text>
-        );
-      })}
+      {/* Ring level numbers removed to avoid cluttering the chart */}
       {/* Data fill */}
       <path d={dataPath} fill="rgba(124,58,237,0.12)" stroke="none" />
       {/* Data stroke */}
