@@ -23,6 +23,89 @@ function ScoreBar({ score, max = 5 }) {
   );
 }
 
+function SpiderChart({ skills, max = 5 }) {
+  if (!skills || skills.length < 3) return null;
+
+  const size = 260;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = 100;
+  const levels = 5;
+  const n = skills.length;
+
+  const angleFor = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
+  const pointFor = (i, r) => ({
+    x: cx + r * Math.cos(angleFor(i)),
+    y: cy + r * Math.sin(angleFor(i)),
+  });
+
+  // Grid rings
+  const rings = Array.from({ length: levels }, (_, l) => {
+    const r = (radius * (l + 1)) / levels;
+    const pts = Array.from({ length: n }, (__, i) => pointFor(i, r));
+    return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
+  });
+
+  // Axis lines
+  const axes = Array.from({ length: n }, (_, i) => {
+    const outer = pointFor(i, radius);
+    return `M${cx},${cy} L${outer.x.toFixed(2)},${outer.y.toFixed(2)}`;
+  });
+
+  // Data polygon
+  const dataPoints = skills.map(({ avg }, i) => pointFor(i, (Math.min(avg, max) / max) * radius));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') + ' Z';
+
+  // Label positions — push outward past the ring
+  const labelPad = 22;
+  const labels = skills.map(({ skill, avg }, i) => {
+    const pt = pointFor(i, radius + labelPad);
+    const angle = angleFor(i) * (180 / Math.PI);
+    const anchor = Math.abs(Math.cos(angleFor(i))) < 0.1 ? 'middle' : Math.cos(angleFor(i)) > 0 ? 'start' : 'end';
+    return { x: pt.x, y: pt.y, skill, avg, anchor, angle };
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible', display: 'block', margin: '0 auto' }}>
+      {/* Grid rings */}
+      {rings.map((d, i) => (
+        <path key={i} d={d} fill={i % 2 === 0 ? '#f8fafc' : 'none'} stroke="#e2e8f0" strokeWidth="1" />
+      ))}
+      {/* Axis lines */}
+      {axes.map((d, i) => (
+        <path key={i} d={d} stroke="#e2e8f0" strokeWidth="1" />
+      ))}
+      {/* Score level labels on first axis */}
+      {Array.from({ length: levels }, (_, l) => {
+        const r = (radius * (l + 1)) / levels;
+        const pt = pointFor(0, r);
+        return (
+          <text key={l} x={pt.x + 4} y={pt.y - 3} fontSize="9" fill="#94a3b8" textAnchor="start">
+            {l + 1}
+          </text>
+        );
+      })}
+      {/* Data area */}
+      <path d={dataPath} fill="rgba(124,58,237,0.15)" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round" />
+      {/* Data points */}
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="4" fill="#7c3aed" stroke="white" strokeWidth="1.5" />
+      ))}
+      {/* Labels */}
+      {labels.map(({ x, y, skill, avg, anchor }, i) => (
+        <g key={i}>
+          <text x={x} y={y} fontSize="11" fontWeight="600" fill="#334155" textAnchor={anchor} dominantBaseline="middle">
+            {skill.length > 18 ? skill.slice(0, 16) + '…' : skill}
+          </text>
+          <text x={x} y={y + 13} fontSize="10" fill="#7c3aed" textAnchor={anchor} dominantBaseline="middle" fontWeight="700">
+            {avg.toFixed(1)}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 export default function My() {
   const { dataUserId } = useImpersonation();
   const [assessments, setAssessments] = useState([]);
@@ -124,21 +207,24 @@ export default function My() {
         {/* Skills trend */}
         <div className="card section">
           <div className="card-header">
-            <h2 className="card-title">Skills trend</h2>
-            <span className="badge badge-slate">Problem Discovery</span>
+            <h2 className="card-title">Skills overview</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>avg across {assessments.length} assessment{assessments.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="card-body">
             {avgScores.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {avgScores.map(({ skill, avg }) => (
-                  <div key={skill}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#334155' }}>{skill}</span>
+              <>
+                <SpiderChart skills={avgScores} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                  {avgScores.map(({ skill, avg }) => (
+                    <div key={skill}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '0.8125rem', color: '#334155' }}>{skill}</span>
+                      </div>
+                      <ScoreBar score={avg} />
                     </div>
-                    <ScoreBar score={avg} />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="empty-state">
                 <div className="empty-icon">📊</div>
@@ -283,9 +369,6 @@ export default function My() {
                                 };
                               });
                               setPdp((prev) => (prev ? { ...prev, focus_areas: nextFocusAreas, last_updated: now } : null));
-                              // #region agent log
-                              fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone',message:'toggle via worker API',data:{pdpId:pdp?.id,dataUserId,milestoneJ:j,focusAreaI:i,toStatus:isCompleted?'open':'completed'},hypothesisId:'A',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
-                              // #endregion
                               try {
                                 const { data: { session } } = await supabase.auth.getSession();
                                 const token = session?.access_token;
@@ -294,9 +377,6 @@ export default function My() {
                                   headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
                                   body: JSON.stringify({ sellerId: dataUserId, focusAreas: nextFocusAreas })
                                 });
-                                // #region agent log
-                                fetch('http://127.0.0.1:7340/ingest/528854f9-5e48-4287-b84d-996ef26e259f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f002a3'},body:JSON.stringify({sessionId:'f002a3',location:'My.jsx:toggleMilestone-result',message:'worker API result',data:{status:res.status,ok:res.ok},hypothesisId:'A',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
-                                // #endregion
                                 if (!res.ok) setPdp((prev) => (prev ? { ...prev, focus_areas: pdp.focus_areas, last_updated: pdp.last_updated } : null));
                               } catch {
                                 setPdp((prev) => (prev ? { ...prev, focus_areas: pdp.focus_areas, last_updated: pdp.last_updated } : null));
