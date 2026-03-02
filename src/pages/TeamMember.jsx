@@ -2,19 +2,17 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import PdpChatPanel from '../components/PdpChatPanel';
+import SpiderChart, { ScoreBar } from '../components/SpiderChart';
 
-function Avatar({ name, size = '' }) {
+function Avatar({ name }) {
   const initials = (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-  return <div className={`avatar ${size}`}>{initials}</div>;
+  return <div className="avatar avatar-lg">{initials}</div>;
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    open: 'badge-amber',
-    exhibited: 'badge-green',
-    completed: 'badge-slate',
-  };
-  return <span className={`badge ${map[status] || 'badge-slate'}`}>{status}</span>;
+function safeScores(a) {
+  return a && typeof a.skill_scores === 'object' && !Array.isArray(a.skill_scores)
+    ? a.skill_scores
+    : {};
 }
 
 export default function TeamMember() {
@@ -22,24 +20,21 @@ export default function TeamMember() {
   const [member, setMember] = useState(null);
   const [assessments, setAssessments] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [actionItems, setActionItems] = useState([]);
   const [pdp, setPdp] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!userId || !supabase) { setLoading(false); return; }
     (async () => {
-      const [uRes, aRes, sRes, aiRes, pRes] = await Promise.all([
+      const [uRes, aRes, sRes, pRes] = await Promise.all([
         supabase.from('users').select('id, full_name, email').eq('id', userId).single(),
-        supabase.from('skill_assessments').select('id, meeting_title, created_at, overall_score, skill_scores').eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
-        supabase.from('coaching_sessions').select('id, session_date, session_summary').eq('user_id', userId).order('session_date', { ascending: false }).limit(20),
-        supabase.from('action_items').select('id, description, status, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
-        supabase.from('development_plans').select('*').eq('user_id', userId).eq('status', 'active').limit(1)
+        supabase.from('skill_assessments').select('id, meeting_title, meeting_date, competency, skill_scores, overall_score, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+        supabase.from('coaching_sessions').select('id, session_date, session_summary, audio_url, coaching_notes, assessment_id').eq('user_id', userId).order('session_date', { ascending: false }).limit(20),
+        supabase.from('development_plans').select('*').eq('user_id', userId).eq('status', 'active').limit(1),
       ]);
       setMember(uRes?.data || null);
       setAssessments(aRes?.data || []);
       setSessions(sRes?.data || []);
-      setActionItems(aiRes?.data || []);
       setPdp(pRes?.data?.[0] || null);
       setLoading(false);
     })();
@@ -48,38 +43,37 @@ export default function TeamMember() {
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading…</div>;
   if (!member) return <div className="page-content"><div className="alert alert-error">Member not found.</div></div>;
 
-  const open = actionItems.filter((a) => a.status === 'open');
-  const exhibited = actionItems.filter((a) => a.status === 'exhibited');
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const avgScores = assessments.length
+    ? Object.entries(
+        assessments.reduce((acc, a) => {
+          Object.entries(safeScores(a)).forEach(([k, v]) => {
+            const n = typeof v === 'number' ? v : Number(v);
+            if (!Number.isNaN(n)) acc[k] = (acc[k] || []).concat(n);
+          });
+          return acc;
+        }, {})
+      ).map(([skill, vals]) => ({ skill, avg: vals.reduce((s, v) => s + v, 0) / vals.length }))
+    : [];
 
-  const pdpProgress = (() => {
-    if (!pdp?.focus_areas?.length) return null;
-    let total = 0, completedM = 0, sectionsComplete = 0;
-    pdp.focus_areas.forEach((area) => {
-      const ms = (area && area.milestones) || [];
-      total += ms.length;
-      const c = ms.filter((m) => m.status === 'completed').length;
-      completedM += c;
-      if (ms.length > 0 && c === ms.length) sectionsComplete += 1;
-    });
-    return { total, completed: completedM, sectionsTotal: pdp.focus_areas.length, sectionsComplete };
-  })();
-
-  const pdpPct = pdpProgress?.total > 0 ? Math.round((pdpProgress.completed / pdpProgress.total) * 100) : 0;
+  const totalMilestones = pdp?.focus_areas?.reduce((s, a) => s + (a?.milestones?.length || 0), 0) || 0;
+  const doneMilestones = pdp?.focus_areas?.reduce((s, a) => s + (a?.milestones?.filter((m) => m.status === 'completed').length || 0), 0) || 0;
+  const pdpPct = totalMilestones > 0 ? Math.round((doneMilestones / totalMilestones) * 100) : 0;
 
   return (
     <div>
       <Link to="/team" className="back-link">← Back to team</Link>
 
-      {/* Member header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-        <Avatar name={member.full_name || member.email} size="avatar-lg" />
+      {/* Header */}
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
+        <Avatar name={member.full_name || member.email} />
         <div>
           <h1 className="page-title" style={{ marginBottom: '2px' }}>{member.full_name || member.email}</h1>
           <p className="page-subtitle">{member.email}</p>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats row */}
       <div className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card">
           <div className="stat-value">{assessments.length}</div>
@@ -90,82 +84,65 @@ export default function TeamMember() {
           <div className="stat-label">Coaching sessions</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#d97706' }}>{open.length}</div>
-          <div className="stat-label">Open actions</div>
+          <div className="stat-value" style={{ color: pdp ? '#7c3aed' : '#94a3b8' }}>{pdp ? `${pdpPct}%` : '—'}</div>
+          <div className="stat-label">PDP progress</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#16a34a' }}>{exhibited.length}</div>
-          <div className="stat-label">Exhibited</div>
+          <div className="stat-value" style={{ color: '#16a34a' }}>{doneMilestones}</div>
+          <div className="stat-label">Milestones done</div>
         </div>
       </div>
 
-      {/* PDP progress banner */}
-      {pdpProgress && pdpProgress.total > 0 && (
-        <div className="card section" style={{ borderLeft: '4px solid #7c3aed' }}>
-          <div className="card-body" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}>Development plan progress</span>
-              <div style={{ display: 'flex', gap: '16px', fontSize: '0.8125rem', color: '#64748b' }}>
-                <span>{pdpProgress.completed}/{pdpProgress.total} milestones</span>
-                <span>{pdpProgress.sectionsComplete}/{pdpProgress.sectionsTotal} sections</span>
-                {pdpProgress.completed === pdpProgress.total && pdpProgress.total > 0 && (
-                  <span className="badge badge-green">All complete ✓</span>
-                )}
-              </div>
-            </div>
-            <div style={{ height: '8px', background: '#e2e8f0', borderRadius: '99px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pdpPct}%`, background: pdpPct === 100 ? '#16a34a' : 'linear-gradient(90deg, #7c3aed, #a855f7)', borderRadius: '99px', transition: 'width 0.4s' }} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="two-col">
-        {/* Assessments */}
-        <div className="card section">
+      {/* Skills overview + Coaching sessions */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '18px', marginBottom: '24px', alignItems: 'stretch' }}>
+        {/* Skills overview */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card-header">
-            <h2 className="card-title">Assessments</h2>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{assessments.length}</span>
+            <h2 className="card-title">Skills overview</h2>
+            <span className="badge badge-purple">{assessments.length} assessment{assessments.length !== 1 ? 's' : ''}</span>
           </div>
-          {assessments.length > 0 ? (
-            <div className="card-body-tight">
-              {assessments.map((a) => (
-                <div key={a.id} className="list-item">
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Link to={`/team/${userId}/assessment/${a.id}`} className="text-link" style={{ fontSize: '0.875rem' }}>
-                      {a.meeting_title || 'Untitled'}
-                    </Link>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '1px' }}>
-                      {new Date(a.created_at).toLocaleDateString()}
+          <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {avgScores.length > 0 ? (
+              <>
+                <SpiderChart skills={avgScores} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                  {avgScores.map(({ skill, avg }) => (
+                    <div key={skill}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '0.8125rem', color: '#334155' }}>{skill}</span>
+                      </div>
+                      <ScoreBar score={avg} />
                     </div>
-                  </div>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#475569', flexShrink: 0 }}>
-                    {a.overall_score != null ? `${Number(a.overall_score).toFixed(1)}/5` : '—'}
-                  </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="card-body"><div className="empty-state" style={{ padding: '20px 0' }}><div className="empty-icon">🎯</div><div>No assessments yet.</div></div></div>
-          )}
+              </>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">📊</div>
+                <div>No assessments yet.</div>
+                <div style={{ marginTop: '4px', fontSize: '0.8rem' }}>Assessments appear once this rep is evaluated.</div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Coaching sessions */}
-        <div className="card section">
+        {/* Recent coaching sessions */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div className="card-header">
             <h2 className="card-title">Coaching sessions</h2>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{sessions.length}</span>
+            <span className="badge badge-slate">{sessions.length} total</span>
           </div>
           {sessions.length > 0 ? (
-            <div className="card-body-tight">
-              {sessions.map((s) => (
+            <div className="card-body-tight" style={{ flex: 1 }}>
+              {sessions.slice(0, 5).map((s) => (
                 <div key={s.id} className="list-item">
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#7c3aed', marginTop: 6, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Link to={`/team/${userId}/session/${s.id}`} className="text-link" style={{ fontSize: '0.875rem' }}>
+                    <Link to={`/team/${userId}/session/${s.id}`} className="text-link" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '2px' }}>
                       {new Date(s.session_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Link>
                     {s.session_summary && (
-                      <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {s.session_summary}
                       </p>
                     )}
@@ -174,33 +151,51 @@ export default function TeamMember() {
               ))}
             </div>
           ) : (
-            <div className="card-body"><div className="empty-state" style={{ padding: '20px 0' }}><div className="empty-icon">💬</div><div>No sessions yet.</div></div></div>
+            <div className="card-body" style={{ flex: 1 }}>
+              <div className="empty-state" style={{ padding: '20px 0' }}>
+                <div className="empty-icon">💬</div>
+                <div>No coaching sessions yet.</div>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Action items */}
-      {actionItems.length > 0 && (
-        <div className="card section">
-          <div className="card-header">
-            <h2 className="card-title">Action items</h2>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <span className="badge badge-amber">{open.length} open</span>
-              <span className="badge badge-green">{exhibited.length} exhibited</span>
-            </div>
-          </div>
+      {/* Assessment history */}
+      <div className="card section">
+        <div className="card-header">
+          <h2 className="card-title">Assessment history</h2>
+          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{assessments.length} total</span>
+        </div>
+        {assessments.length > 0 ? (
           <div className="card-body-tight">
-            {actionItems.slice(0, 15).map((a) => (
+            {assessments.map((a) => (
               <div key={a.id} className="list-item">
-                <div style={{ flex: 1, fontSize: '0.875rem', color: '#334155' }}>{a.description}</div>
-                <StatusBadge status={a.status} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Link to={`/team/${userId}/assessment/${a.id}`} className="text-link" style={{ fontSize: '0.875rem' }}>
+                    {a.meeting_title || 'Untitled meeting'}
+                  </Link>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
+                    {new Date(a.created_at).toLocaleDateString()} · {a.competency}
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#475569' }}>
+                  {a.overall_score != null ? `${Number(a.overall_score).toFixed(1)}/5` : '—'}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="card-body">
+            <div className="empty-state" style={{ padding: '20px 0' }}>
+              <div className="empty-icon">🎯</div>
+              <div>No assessments yet.</div>
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* PDP Chat Panel */}
+      {/* PDP Chat Panel — owns the full plan view, edit, AI chat, mark complete, and past plans */}
       <div className="section">
         <PdpChatPanel
           userId={userId}
