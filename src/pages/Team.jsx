@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
@@ -63,6 +63,16 @@ export default function Team() {
   const [sessionsByUser, setSessionsByUser] = useState({});
   const [actionsByUser, setActionsByUser] = useState({});
   const [loading, setLoading] = useState(true);
+  const [sortCol, setSortCol] = useState('overallAvg');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const handleSort = useCallback((col) => {
+    setSortCol((prev) => {
+      if (prev === col) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); return col; }
+      setSortDir(col === 'member' ? 'asc' : 'desc');
+      return col;
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -223,7 +233,32 @@ export default function Team() {
       trend: memberTrend[m.id],
       lastActivity: assessments[0]?.created_at || sessions[0]?.session_date || null,
     };
-  }).sort((a, b) => (b.overallAvg ?? -1) - (a.overallAvg ?? -1));
+  });
+
+  const SORT_COLS = {
+    member:          (r) => (r.member.full_name || r.member.email || '').toLowerCase(),
+    overallAvg:      (r) => r.overallAvg ?? -Infinity,
+    trend:           (r) => r.trend ?? -Infinity,
+    assessmentCount: (r) => r.assessmentCount,
+    sessionCount:    (r) => r.sessionCount,
+    openActions:     (r) => r.openActions,
+    pdp:             (r) => r.planProgress.total > 0 ? r.planProgress.completed / r.planProgress.total : -1,
+  };
+
+  const sortedRows = [...repRows].sort((a, b) => {
+    const fn = SORT_COLS[sortCol] || SORT_COLS.overallAvg;
+    const av = fn(a), bv = fn(b);
+    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const SORT_LABELS = {
+    member: 'Rep name', overallAvg: 'Avg score', trend: 'Trend',
+    assessmentCount: 'Assessments', sessionCount: 'Sessions',
+    openActions: 'Open actions', pdp: 'PDP progress',
+  };
+  const sortBadgeText = `${SORT_LABELS[sortCol] || sortCol} ${sortDir === 'asc' ? '↑' : '↓'}`;
 
   return (
     <div>
@@ -356,24 +391,46 @@ export default function Team() {
         <div className="card" style={{ marginBottom: '24px' }}>
           <div className="card-header">
             <h2 className="card-title">Rep performance</h2>
-            <span className="badge badge-slate">sorted by avg score</span>
+            <span className="badge badge-slate">{sortBadgeText}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Rep</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Avg score</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Trend</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Assessments</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sessions</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Open actions</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', minWidth: '120px' }}>PDP progress</th>
+                  {[
+                    { col: 'member',          label: 'Rep',          align: 'left',   extraStyle: { paddingLeft: '16px' } },
+                    { col: 'overallAvg',      label: 'Avg score',    align: 'center', extraStyle: {} },
+                    { col: 'trend',           label: 'Trend',        align: 'center', extraStyle: {} },
+                    { col: 'assessmentCount', label: 'Assessments',  align: 'center', extraStyle: {} },
+                    { col: 'sessionCount',    label: 'Sessions',     align: 'center', extraStyle: {} },
+                    { col: 'openActions',     label: 'Open actions', align: 'center', extraStyle: {} },
+                    { col: 'pdp',             label: 'PDP progress', align: 'left',   extraStyle: { minWidth: '120px' } },
+                  ].map(({ col, label, align, extraStyle }) => {
+                    const active = sortCol === col;
+                    return (
+                      <th
+                        key={col}
+                        onClick={() => handleSort(col)}
+                        style={{
+                          padding: '10px 12px', textAlign: align, fontWeight: 600,
+                          color: active ? '#7c3aed' : '#64748b',
+                          fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em',
+                          cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+                          ...extraStyle,
+                        }}
+                      >
+                        {label}
+                        <span style={{ marginLeft: '4px', opacity: active ? 1 : 0.3 }}>
+                          {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                        </span>
+                      </th>
+                    );
+                  })}
                   <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {repRows.map(({ member, assessmentCount, sessionCount, openActions, overallAvg, planProgress: progress, trend, lastActivity }) => {
+                {sortedRows.map(({ member, assessmentCount, sessionCount, openActions, overallAvg, planProgress: progress, trend, lastActivity }) => {
                   const allDone = progress.total > 0 && progress.completed === progress.total;
                   return (
                     <tr key={member.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
