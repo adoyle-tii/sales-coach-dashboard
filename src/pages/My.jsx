@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar } from '../components/SpiderChart';
+import CourseCompletionPanel from '../components/CourseCompletionPanel';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
@@ -21,6 +22,9 @@ export default function My() {
   const [pastPlansOpen, setPastPlansOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
+  const [courseCompletions, setCourseCompletions] = useState([]);
+  const [courseLoading, setCourseLoading] = useState(false);
+  const [courseError, setCourseError] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -39,10 +43,21 @@ export default function My() {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const token = session?.access_token;
-          const hRes = await fetch(`${WORKER_URL}/pdp/history?sellerId=${encodeURIComponent(dataUserId)}`, {
-            headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
-          });
+          const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+          const hRes = await fetch(`${WORKER_URL}/pdp/history?sellerId=${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
           if (hRes.ok) { const h = await hRes.json().catch(() => []); setPastPlans(Array.isArray(h) ? h : []); }
+
+          // Course completion data
+          setCourseLoading(true);
+          try {
+            const cRes = await fetch(`${WORKER_URL}/hs/completion/${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
+            if (cRes.ok) {
+              const cData = await cRes.json().catch(() => ({}));
+              setCourseCompletions(cData.courses || []);
+            }
+          } catch { /* ignore — may not be configured yet */ } finally {
+            setCourseLoading(false);
+          }
         } catch { /* ignore */ }
       } catch {
         setAssessments([]); setSessions([]); setPdp(null);
@@ -441,6 +456,13 @@ export default function My() {
           )}
         </div>
       )}
+
+      {/* Core Curriculum / Course Completion */}
+      <CourseCompletionPanel
+        completions={courseCompletions}
+        loading={courseLoading}
+        error={courseError}
+      />
     </div>
   );
 }

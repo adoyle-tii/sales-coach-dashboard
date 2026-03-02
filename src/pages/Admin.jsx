@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
@@ -37,6 +37,19 @@ export default function Admin() {
   const [createTeamLoading, setCreateTeamLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [impersonateId, setImpersonateId] = useState('');
+
+  // Course Reporting state
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+  const [catalogue, setCatalogue] = useState([]);
+  const [catalogueError, setCatalogueError] = useState(null);
+  const [trackedCourseIds, setTrackedCourseIds] = useState([]);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [ingestStatus, setIngestStatus] = useState(null);
+  const [ingestLoading, setIngestLoading] = useState(false);
+  const [ingestError, setIngestError] = useState(null);
+  const [ingestSuccess, setIngestSuccess] = useState(null);
+  const [csvFiles, setCsvFiles] = useState({});
+  const [courseReportingOpen, setCourseReportingOpen] = useState(false);
 
   useEffect(() => { supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id)); }, []);
   useEffect(() => { load(); }, []);
@@ -147,6 +160,108 @@ export default function Admin() {
   function startImpersonating(userId) {
     setImpersonatingUserId(userId);
     navigate('/my');
+  }
+
+  async function getAuthHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+  }
+
+  const loadCatalogue = useCallback(async () => {
+    setCatalogueLoading(true); setCatalogueError(null);
+    try {
+      const authH = await getAuthHeaders();
+      const [catRes, settingsRes] = await Promise.all([
+        fetch(`${WORKER_URL}/hs/catalogue`, { headers: { 'Content-Type': 'application/json', ...authH } }),
+        fetch(`${WORKER_URL}/admin/hs-settings`, { headers: { 'Content-Type': 'application/json', ...authH } }),
+      ]);
+      if (catRes.ok) {
+        const json = await catRes.json();
+        setCatalogue(json.courses || []);
+      } else {
+        const j = await catRes.json().catch(() => ({}));
+        setCatalogueError(j.error || 'Failed to load catalogue. Ensure HIGHSPOT_API_KEY and HIGHSPOT_API_URL are set in the worker.');
+      }
+      if (settingsRes.ok) {
+        const sj = await settingsRes.json();
+        setTrackedCourseIds(sj.trackedCourseIds || []);
+      }
+    } catch (e) {
+      setCatalogueError(e.message || 'Network error loading catalogue.');
+    } finally {
+      setCatalogueLoading(false);
+    }
+  }, []);
+
+  async function loadIngestStatus() {
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-ingest-status`, { headers: { 'Content-Type': 'application/json', ...authH } });
+      if (res.ok) setIngestStatus(await res.json());
+    } catch { /* ignore */ }
+  }
+
+  const openCourseReporting = useCallback(() => {
+    if (!courseReportingOpen) {
+      setCourseReportingOpen(true);
+      loadCatalogue();
+      loadIngestStatus();
+    } else {
+      setCourseReportingOpen(false);
+    }
+  }, [courseReportingOpen, loadCatalogue]);
+
+  async function saveTrackedCourses() {
+    setSettingsSaving(true);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ trackedCourseIds }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMessage({ type: 'error', text: json.error || 'Failed to save course settings.' }); }
+      else { setMessage({ type: 'success', text: 'Course reporting configuration saved.' }); }
+    } catch (e) {
+      setMessage({ type: 'error', text: e.message || 'Failed to save.' });
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  function toggleTrackedCourse(id) {
+    setTrackedCourseIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
+  function onCsvFile(key, file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setCsvFiles((prev) => ({ ...prev, [key]: e.target.result }));
+    reader.readAsText(file);
+  }
+
+  async function triggerIngest() {
+    setIngestLoading(true); setIngestError(null); setIngestSuccess(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify(csvFiles),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setIngestError(json.error || 'Ingest failed.'); }
+      else {
+        const s = json.stats || {};
+        setIngestSuccess(`Ingest complete — ${s.courses ?? 0} courses, ${s.lessons ?? 0} lessons, ${s.course_completions ?? 0} course completions, ${s.lesson_completions ?? 0} lesson completions, ${s.rubric_ratings ?? 0} rubric ratings.`);
+        loadIngestStatus();
+      }
+    } catch (e) {
+      setIngestError(e.message || 'Ingest failed.');
+    } finally {
+      setIngestLoading(false);
+    }
   }
 
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading admin…</div>;
@@ -435,6 +550,181 @@ export default function Admin() {
           )}
         </div>
       </div>
+
+      {/* Course Reporting Configuration — superadmin only */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div
+            className="card-header"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={openCourseReporting}
+          >
+            <h2 className="card-title">Course Reporting</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {courseReportingOpen ? 'Collapse ▲' : 'Configure Highspot course tracking ▼'}
+            </span>
+          </div>
+
+          {courseReportingOpen && (
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
+                Select which Highspot Sales Competency courses to show in seller and manager dashboards.
+                Courses are fetched live from the Highspot API. Tick the courses you want to track, then save.
+              </p>
+
+              {/* Catalogue picker */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                  <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600 }}>Available courses</h3>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: '0.8125rem', padding: '4px 10px' }}
+                    onClick={loadCatalogue}
+                    disabled={catalogueLoading}
+                  >
+                    {catalogueLoading ? 'Loading…' : 'Refresh'}
+                  </button>
+                  {trackedCourseIds.length > 0 && (
+                    <span className="badge badge-blue">{trackedCourseIds.length} tracked</span>
+                  )}
+                </div>
+
+                {catalogueError && (
+                  <div className="alert alert-error" style={{ marginBottom: '12px' }}>{catalogueError}</div>
+                )}
+
+                {catalogueLoading && (
+                  <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Fetching catalogue from Highspot…</div>
+                )}
+
+                {!catalogueLoading && catalogue.length === 0 && !catalogueError && (
+                  <div className="empty-state" style={{ padding: '20px' }}>
+                    <div className="empty-icon">📚</div>
+                    <div>No courses found. Click Refresh to load from Highspot API.</div>
+                  </div>
+                )}
+
+                {catalogue.length > 0 && (() => {
+                  const byCompetency = catalogue.reduce((acc, c) => {
+                    const key = c.competency || 'Uncategorised';
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(c);
+                    return acc;
+                  }, {});
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {Object.entries(byCompetency).sort(([a], [b]) => a.localeCompare(b)).map(([competency, courses]) => (
+                        <div key={competency}>
+                          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {competency}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {courses.map((c) => (
+                              <label
+                                key={c.hs_item_id}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', background: trackedCourseIds.includes(c.hs_item_id) ? '#eff6ff' : '#f8fafc', border: `1px solid ${trackedCourseIds.includes(c.hs_item_id) ? '#bfdbfe' : '#e2e8f0'}`, fontSize: '0.875rem' }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={trackedCourseIds.includes(c.hs_item_id)}
+                                  onChange={() => toggleTrackedCourse(c.hs_item_id)}
+                                  style={{ accentColor: '#2563eb', width: '15px', height: '15px' }}
+                                />
+                                <span style={{ fontWeight: 500 }}>{c.name}</span>
+                                {c.lesson_type && (
+                                  <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', borderRadius: '4px', padding: '2px 6px' }}>
+                                    {c.lesson_type === 'skills_assessment' ? 'Skills Assessment' : 'Lesson'}
+                                  </span>
+                                )}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <div style={{ marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={saveTrackedCourses}
+                    disabled={settingsSaving}
+                  >
+                    {settingsSaving ? 'Saving…' : 'Save configuration'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Data ingest panel */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: '0.9375rem', fontWeight: 600 }}>Data ingest</h3>
+                <p style={{ margin: '0 0 14px', fontSize: '0.875rem', color: '#64748b' }}>
+                  Upload nightly Data Lake CSV exports from Highspot to sync completion data.
+                  Accepted files: <code>items</code>, <code>course_lessons</code>, <code>course_members</code>,
+                  <code>user_course_lesson_completions</code>, <code>rubric_ratings</code>,
+                  <code>lists</code>, <code>item_lists</code>.
+                </p>
+
+                {ingestStatus?.synced_at && (
+                  <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
+                    Last sync: {new Date(ingestStatus.synced_at).toLocaleString()}
+                    {ingestStatus.stats && (
+                      <span style={{ marginLeft: '10px', color: '#4b5563' }}>
+                        — {ingestStatus.stats.courses ?? 0} courses · {ingestStatus.stats.lessons ?? 0} lessons · {ingestStatus.stats.course_completions ?? 0} course completions · {ingestStatus.stats.lesson_completions ?? 0} lesson completions
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {[
+                  { key: 'items', label: 'items.csv' },
+                  { key: 'course_lessons', label: 'course_lessons.csv' },
+                  { key: 'course_members', label: 'course_members.csv' },
+                  { key: 'user_course_lesson_completions', label: 'user_course_lesson_completions.csv' },
+                  { key: 'rubric_ratings', label: 'rubric_ratings.csv' },
+                  { key: 'lists', label: 'lists.csv (optional)' },
+                  { key: 'item_lists', label: 'item_lists.csv (optional)' },
+                ].map(({ key, label }) => (
+                  <div key={key} className="form-group" style={{ marginBottom: '10px' }}>
+                    <label className="form-label">{label}</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        style={{ fontSize: '0.8125rem' }}
+                        onChange={(e) => onCsvFile(key, e.target.files?.[0])}
+                      />
+                      {csvFiles[key] && (
+                        <span style={{ fontSize: '0.75rem', color: '#16a34a' }}>✓ loaded</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {ingestError && (
+                  <div className="alert alert-error" style={{ margin: '10px 0' }}>{ingestError}</div>
+                )}
+                {ingestSuccess && (
+                  <div className="alert alert-success" style={{ margin: '10px 0' }}>{ingestSuccess}</div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={triggerIngest}
+                  disabled={ingestLoading || Object.keys(csvFiles).length === 0}
+                  style={{ marginTop: '8px' }}
+                >
+                  {ingestLoading ? 'Importing…' : 'Run import'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Role legend */}
       <div className="card section" style={{ background: '#f8fafc' }}>

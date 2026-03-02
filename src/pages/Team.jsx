@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar, scoreColor } from '../components/SpiderChart';
 
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
+
 function Avatar({ name }) {
   const initials = (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   return <div className="avatar">{initials}</div>;
@@ -65,6 +67,8 @@ export default function Team() {
   const [loading, setLoading] = useState(true);
   const [sortCol, setSortCol] = useState('overallAvg');
   const [sortDir, setSortDir] = useState('desc');
+  const [teamCourses, setTeamCourses] = useState([]);
+  const [teamCoursesLoading, setTeamCoursesLoading] = useState(false);
 
   const handleSort = useCallback((col) => {
     setSortCol((prev) => {
@@ -137,6 +141,25 @@ export default function Team() {
           byUserActs[a.user_id].push(a);
         });
         setActionsByUser(byUserActs);
+
+        // Fetch team course completion (non-blocking)
+        const teamId = viewProfile?.team_id;
+        if (teamId) {
+          setTeamCoursesLoading(true);
+          try {
+            const { data: { session: authSession } } = await supabase.auth.getSession();
+            const token = authSession?.access_token;
+            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(teamId)}`, {
+              headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+            });
+            if (cRes.ok) {
+              const cData = await cRes.json().catch(() => ({}));
+              setTeamCourses(cData.courses || []);
+            }
+          } catch { /* ignore */ } finally {
+            setTeamCoursesLoading(false);
+          }
+        }
       } catch {
         setMembers([]);
       } finally {
@@ -489,6 +512,54 @@ export default function Team() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Course completion summary */}
+      {(teamCourses.length > 0 || teamCoursesLoading) && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-header">
+            <h2 className="card-title">Core Curriculum completion</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>across {members.length} reps</span>
+          </div>
+          {teamCoursesLoading ? (
+            <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', fontSize: '0.875rem' }}>
+              <div className="spinner" style={{ width: '16px', height: '16px' }} /> Loading course data…
+            </div>
+          ) : (
+            <div className="card-body">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {teamCourses.map((course) => {
+                  const pct = course.completion_pct ?? 0;
+                  const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+                  return (
+                    <div key={course.hs_item_id}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b', flex: 1 }}>{course.name}</span>
+                        {course.competency && (
+                          <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>
+                            {course.competency}
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: barColor, minWidth: '36px', textAlign: 'right' }}>{pct}%</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ flex: 1, height: '10px', borderRadius: '5px', background: '#e2e8f0', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '5px', transition: 'width 0.4s ease' }} />
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{course.completed} / {course.member_count} complete</span>
+                        {course.started > course.completed && (
+                          <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>
+                            {course.started - course.completed} in progress
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

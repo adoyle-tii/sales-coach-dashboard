@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import PdpChatPanel from '../components/PdpChatPanel';
 import SpiderChart, { ScoreBar } from '../components/SpiderChart';
+import CourseCompletionPanel from '../components/CourseCompletionPanel';
+
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
 function Avatar({ name }) {
   const initials = (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -22,6 +25,8 @@ export default function TeamMember() {
   const [sessions, setSessions] = useState([]);
   const [pdp, setPdp] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [courseCompletions, setCourseCompletions] = useState([]);
+  const [courseLoading, setCourseLoading] = useState(false);
 
   useEffect(() => {
     if (!userId || !supabase) { setLoading(false); return; }
@@ -37,6 +42,22 @@ export default function TeamMember() {
       setSessions(sRes?.data || []);
       setPdp(pRes?.data?.[0] || null);
       setLoading(false);
+
+      // Fetch course completions for this member
+      setCourseLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const cRes = await fetch(`${WORKER_URL}/hs/completion/${encodeURIComponent(userId)}`, {
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        });
+        if (cRes.ok) {
+          const cData = await cRes.json().catch(() => ({}));
+          setCourseCompletions(cData.courses || []);
+        }
+      } catch { /* ignore — may not be configured yet */ } finally {
+        setCourseLoading(false);
+      }
     })();
   }, [userId]);
 
@@ -205,6 +226,13 @@ export default function TeamMember() {
             const { data } = await supabase.from('development_plans').select('*').eq('user_id', userId).eq('status', 'active').limit(1);
             setPdp(data?.[0] || null);
           }}
+        />
+
+        {/* Core Curriculum / Course Completion */}
+        <CourseCompletionPanel
+          completions={courseCompletions}
+          loading={courseLoading}
+          error={null}
         />
       </div>
     </div>
