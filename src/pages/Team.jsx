@@ -143,7 +143,6 @@ export default function Team() {
         setActionsByUser(byUserActs);
 
         // Fetch team course completion (non-blocking)
-        const teamId = viewProfile?.team_id;
         if (teamId) {
           setTeamCoursesLoading(true);
           try {
