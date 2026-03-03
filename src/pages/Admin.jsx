@@ -86,6 +86,8 @@ export default function Admin() {
   const [hierarchyApplying, setHierarchyApplying]     = useState(false);
   const [hierarchyResult, setHierarchyResult]         = useState(null);
   const [hierarchyError, setHierarchyError]           = useState(null);
+  const [rebuildingReportsTo, setRebuildingReportsTo] = useState(false);
+  const [rebuildReportsToResult, setRebuildReportsToResult] = useState(null);
 
   // User sync state
   const [userSyncOpen, setUserSyncOpen] = useState(false);
@@ -413,6 +415,35 @@ export default function Admin() {
       }
     } catch (e) { setHierarchyError(e.message); }
     finally { setHierarchyConfigLoading(false); }
+  }
+
+  async function rebuildReportsTo(usersFile) {
+    setRebuildingReportsTo(true); setHierarchyError(null); setRebuildReportsToResult(null);
+    try {
+      const authH = await getAuthHeaders();
+      // Step 1: upload users.csv to staging
+      const formData = new FormData();
+      formData.append('file', usersFile);
+      const uploadRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=users`, {
+        method: 'POST',
+        headers: { ...authH },
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        const j = await uploadRes.json().catch(() => ({}));
+        throw new Error(j.error || 'Failed to upload users.csv');
+      }
+      // Step 2: call rebuild_reports_to RPC
+      const rebuildRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=rebuild_reports_to`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({}),
+      });
+      const json = await rebuildRes.json().catch(() => ({}));
+      if (!rebuildRes.ok) throw new Error(json.error || 'Rebuild failed');
+      setRebuildReportsToResult(json);
+    } catch (e) { setHierarchyError(e.message); }
+    finally { setRebuildingReportsTo(false); }
   }
 
   async function applyHierarchyRoles() {
@@ -1360,11 +1391,46 @@ export default function Admin() {
                 </button>
               </div>
 
-              {/* Apply button + results */}
+              {/* Step 1: Rebuild reports_to chain */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0 0 8px' }}>
+                  <strong>Step 1 (one-time fix):</strong> Upload your <code>users.csv</code> to rebuild the manager reporting chain.
+                  Only needed if hierarchy roles are showing 0 — after each full user sync this is handled automatically.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    id="rebuildUsersCsv"
+                    style={{ fontSize: '0.8125rem' }}
+                    onChange={() => { setRebuildReportsToResult(null); setHierarchyError(null); }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={rebuildingReportsTo}
+                    onClick={() => {
+                      const f = document.getElementById('rebuildUsersCsv')?.files?.[0];
+                      if (!f) { setHierarchyError('Select users.csv first'); return; }
+                      rebuildReportsTo(f);
+                    }}
+                  >
+                    {rebuildingReportsTo ? 'Rebuilding…' : 'Rebuild reporting chain'}
+                  </button>
+                </div>
+                {rebuildReportsToResult && (
+                  <div style={{ marginTop: '8px', padding: '8px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
+                    Reporting chain rebuilt — <strong>{rebuildReportsToResult.reports_to_updated}</strong> users updated,{' '}
+                    <strong>{rebuildReportsToResult.still_missing}</strong> without a manager.
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Apply hierarchy roles */}
               <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
                 <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0 0 12px' }}>
-                  Once the executive is saved, click below to walk the org chart and assign hierarchy roles to all users.
-                  This is safe to re-run after each user sync.
+                  <strong>Step 2:</strong> Walk the org chart from the executive and assign Senior Leader → Leader → Manager roles.
+                  Safe to re-run after each user sync.
                 </p>
 
                 {hierarchyError && (
