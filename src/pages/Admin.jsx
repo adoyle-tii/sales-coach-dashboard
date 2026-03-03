@@ -622,22 +622,60 @@ export default function Admin() {
       )}
 
       {/* Summary stats */}
-      <div className="stats-grid" style={{ marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+        {/* Total users */}
         <div className="stat-card">
           <div className="stat-value">{userList.length}</div>
           <div className="stat-label">Total users</div>
         </div>
+        {/* Teams */}
         <div className="stat-card">
           <div className="stat-value">{teamList.length}</div>
           <div className="stat-label">Teams</div>
         </div>
+        {/* Executives */}
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#b45309' }}>{userList.filter((u) => u.role === 'executive').length}</div>
+          <div className="stat-label">Executives</div>
+        </div>
+        {/* Senior Leaders */}
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#4338ca' }}>{userList.filter((u) => u.role === 'senior_leader').length}</div>
+          <div className="stat-label">Senior Leaders</div>
+        </div>
+        {/* Leaders */}
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: '#0f766e' }}>{userList.filter((u) => u.role === 'leader').length}</div>
+          <div className="stat-label">Leaders</div>
+        </div>
+        {/* Managers */}
         <div className="stat-card">
           <div className="stat-value" style={{ color: '#7c3aed' }}>{userList.filter((u) => u.role === 'manager').length}</div>
           <div className="stat-label">Managers</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: '#2563eb' }}>{userList.filter((u) => u.role === 'rep').length}</div>
-          <div className="stat-label">Reps</div>
+        {/* Reps with sub-role breakdown */}
+        <div className="stat-card" style={{ gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <div className="stat-value" style={{ color: '#2563eb' }}>{userList.filter((u) => u.role === 'rep').length}</div>
+            <div className="stat-label">Reps</div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
+            {[
+              { key: 'ae',  label: 'AE',  color: '#2563eb' },
+              { key: 'sdr', label: 'SDR', color: '#0891b2' },
+              { key: 'csm', label: 'CSM', color: '#16a34a' },
+              { key: 'am',  label: 'AM',  color: '#9333ea' },
+              { key: null,  label: 'Other', color: '#64748b' },
+            ].map(({ key, label, color }) => {
+              const count = userList.filter((u) => u.role === 'rep' && (key === null ? !u.sub_role : u.sub_role === key)).length;
+              if (count === 0) return null;
+              return (
+                <span key={label} style={{ fontSize: '0.75rem', fontWeight: 600, color, background: `${color}18`, borderRadius: '999px', padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                  {count} {label}
+                </span>
+              );
+            })}
+          </div>
         </div>
       </div>
 
