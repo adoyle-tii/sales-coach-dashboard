@@ -6,9 +6,12 @@ import { useImpersonation } from '../context/ImpersonationContext';
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
 const ROLES = [
-  { value: 'rep', label: 'Rep' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'admin', label: 'Admin' },
+  { value: 'rep',           label: 'Rep' },
+  { value: 'manager',       label: 'Manager' },
+  { value: 'leader',        label: 'Leader' },
+  { value: 'senior_leader', label: 'Senior Leader' },
+  { value: 'admin',         label: 'Admin' },
+  { value: 'executive',     label: 'Executive' },
 ];
 
 const SUB_ROLES = [
@@ -20,8 +23,20 @@ const SUB_ROLES = [
 ];
 
 function RoleBadge({ role }) {
-  const map = { superadmin: 'badge-amber', admin: 'badge-purple', manager: 'badge-blue', rep: 'badge-slate' };
-  return <span className={`badge ${map[role] || 'badge-slate'}`}>{role}</span>;
+  const map = {
+    superadmin:    'badge-amber',
+    executive:     'badge-amber',
+    admin:         'badge-purple',
+    senior_leader: 'badge-indigo',
+    leader:        'badge-teal',
+    manager:       'badge-blue',
+    rep:           'badge-slate',
+  };
+  const labels = {
+    senior_leader: 'Senior Leader',
+    executive:     'Executive',
+  };
+  return <span className={`badge ${map[role] || 'badge-slate'}`}>{labels[role] || role}</span>;
 }
 
 export default function Admin() {
@@ -62,6 +77,15 @@ export default function Admin() {
   const [ingestSuccess, setIngestSuccess] = useState(null);
   const [csvFiles, setCsvFiles] = useState({});
   const [courseReportingOpen, setCourseReportingOpen] = useState(false);
+
+  // Org hierarchy state
+  const [hierarchyOpen, setHierarchyOpen]             = useState(false);
+  const [hierarchyConfig, setHierarchyConfig]         = useState(null);   // { executive_id, executive: {…} }
+  const [hierarchyExecutiveId, setHierarchyExecutiveId] = useState('');
+  const [hierarchyConfigLoading, setHierarchyConfigLoading] = useState(false);
+  const [hierarchyApplying, setHierarchyApplying]     = useState(false);
+  const [hierarchyResult, setHierarchyResult]         = useState(null);
+  const [hierarchyError, setHierarchyError]           = useState(null);
 
   // User sync state
   const [userSyncOpen, setUserSyncOpen] = useState(false);
@@ -354,6 +378,58 @@ export default function Admin() {
       await load();
     } catch (e) { setUserSyncError(e.message || 'User sync failed.'); }
     finally { setUserSyncLoading(false); }
+  }
+
+  async function loadHierarchyConfig() {
+    setHierarchyConfigLoading(true);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-hierarchy-config`, { headers: { 'Content-Type': 'application/json', ...authH } });
+      if (res.ok) {
+        const data = await res.json();
+        setHierarchyConfig(data);
+        setHierarchyExecutiveId(data.executive_id || '');
+      }
+    } catch { /* ignore */ }
+    finally { setHierarchyConfigLoading(false); }
+  }
+
+  async function saveHierarchyConfig() {
+    if (!hierarchyExecutiveId) return;
+    setHierarchyConfigLoading(true); setHierarchyError(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-hierarchy-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ executive_id: hierarchyExecutiveId }),
+      });
+      if (res.ok) {
+        const exec = users.find((u) => u.id === hierarchyExecutiveId);
+        setHierarchyConfig({ executive_id: hierarchyExecutiveId, executive: exec || null });
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setHierarchyError(j.error || 'Failed to save executive.');
+      }
+    } catch (e) { setHierarchyError(e.message); }
+    finally { setHierarchyConfigLoading(false); }
+  }
+
+  async function applyHierarchyRoles() {
+    setHierarchyApplying(true); setHierarchyError(null); setHierarchyResult(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-assign-hierarchy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setHierarchyError(json.error || 'Failed to apply hierarchy.'); return; }
+      setHierarchyResult(json);
+      await load();
+    } catch (e) { setHierarchyError(e.message); }
+    finally { setHierarchyApplying(false); }
   }
 
   async function saveTrackedCourses() {
@@ -1203,6 +1279,126 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ================================================================
+          Org Hierarchy (executive → senior_leader → leader → manager)
+          ================================================================ */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div className="card-header" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+            if (!hierarchyOpen) { setHierarchyOpen(true); loadHierarchyConfig(); }
+            else setHierarchyOpen(false);
+          }}>
+            <h2 className="card-title">Org hierarchy roles</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{hierarchyOpen ? '▲ collapse' : '▼ configure'}</span>
+          </div>
+
+          {hierarchyOpen && (
+            <div className="card-body">
+              <p style={{ fontSize: '0.8375rem', color: '#64748b', margin: '0 0 16px' }}>
+                Designate the top-level executive (CRO), then apply hierarchy roles to automatically
+                assign <strong>Senior Leader</strong> (direct reports of the executive),
+                <strong> Leader</strong> (their direct reports), and <strong>Manager</strong> to the remaining levels.
+              </p>
+
+              {/* Hierarchy diagram */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', fontSize: '0.8125rem' }}>
+                {[
+                  { label: 'Executive', color: '#b45309', bg: '#fef3c7' },
+                  { label: '→' },
+                  { label: 'Senior Leader', color: '#4338ca', bg: '#e0e7ff' },
+                  { label: '→' },
+                  { label: 'Leader', color: '#0f766e', bg: '#ccfbf1' },
+                  { label: '→' },
+                  { label: 'Manager', color: '#1d4ed8', bg: '#dbeafe' },
+                  { label: '→' },
+                  { label: 'Rep', color: '#475569', bg: '#f1f5f9' },
+                ].map((item, i) =>
+                  item.label === '→'
+                    ? <span key={i} style={{ color: '#94a3b8' }}>→</span>
+                    : <span key={i} style={{ padding: '3px 10px', borderRadius: '999px', background: item.bg, color: item.color, fontWeight: 600 }}>{item.label}</span>
+                )}
+              </div>
+
+              {/* Current executive */}
+              {hierarchyConfig?.executive && (
+                <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', background: '#fef3c7', border: '1px solid #fcd34d', fontSize: '0.8125rem', color: '#92400e' }}>
+                  Current executive: <strong>{hierarchyConfig.executive.full_name || hierarchyConfig.executive.email}</strong>
+                  <span style={{ color: '#b45309', marginLeft: '8px' }}>({hierarchyConfig.executive.email})</span>
+                </div>
+              )}
+
+              {/* Executive picker */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <div className="form-group" style={{ flex: '1 1 260px' }}>
+                  <label className="form-label">CRO / Top-level executive</label>
+                  <select
+                    className="form-select"
+                    value={hierarchyExecutiveId}
+                    onChange={(e) => setHierarchyExecutiveId(e.target.value)}
+                    disabled={hierarchyConfigLoading}
+                  >
+                    <option value="">— select executive —</option>
+                    {[...users]
+                      .sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name || u.email}
+                          {u.role === 'executive' || u.role === 'superadmin' ? ` (${u.role})` : ''}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={saveHierarchyConfig}
+                  disabled={!hierarchyExecutiveId || hierarchyConfigLoading}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {hierarchyConfigLoading ? 'Saving…' : 'Save executive'}
+                </button>
+              </div>
+
+              {/* Apply button + results */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0 0 12px' }}>
+                  Once the executive is saved, click below to walk the org chart and assign hierarchy roles to all users.
+                  This is safe to re-run after each user sync.
+                </p>
+
+                {hierarchyError && (
+                  <div className="alert alert-error" style={{ margin: '0 0 10px' }}>{hierarchyError}</div>
+                )}
+
+                {hierarchyResult && (
+                  <div style={{ marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
+                    Hierarchy applied —
+                    {' '}<strong>{hierarchyResult.senior_leaders ?? 0}</strong> Senior Leaders,
+                    {' '}<strong>{hierarchyResult.leaders ?? 0}</strong> Leaders,
+                    {' '}<strong>{hierarchyResult.managers ?? 0}</strong> Managers promoted,
+                    {' '}<strong>{hierarchyResult.teams_upserted ?? 0}</strong> teams upserted.
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={applyHierarchyRoles}
+                  disabled={hierarchyApplying || !hierarchyConfig?.executive_id}
+                  style={{ marginTop: '4px' }}
+                >
+                  {hierarchyApplying ? 'Applying…' : 'Apply hierarchy roles'}
+                </button>
+                {!hierarchyConfig?.executive_id && (
+                  <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>Save an executive first</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Role legend */}
       <div className="card section" style={{ background: '#f8fafc' }}>
         <div className="card-header"><h2 className="card-title" style={{ fontSize: '0.875rem', color: '#64748b' }}>Role guide</h2></div>
@@ -1210,7 +1406,10 @@ export default function Admin() {
           <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8125rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <li><strong style={{ color: '#475569' }}>Rep</strong> — Own dashboard only (My Dashboard).</li>
             <li><strong style={{ color: '#475569' }}>Manager</strong> — Team view; can manage development plans for their reps.</li>
-            <li><strong style={{ color: '#475569' }}>Admin</strong> — Manager access plus cross-team read. Superadmins can grant impersonation.</li>
+            <li><strong style={{ color: '#475569' }}>Leader</strong> — Manager of managers; can see all teams under them.</li>
+            <li><strong style={{ color: '#475569' }}>Senior Leader</strong> — RVP level; direct report to the executive.</li>
+            <li><strong style={{ color: '#475569' }}>Executive</strong> — CRO / top-level; full org visibility.</li>
+            <li><strong style={{ color: '#475569' }}>Admin</strong> — Cross-team read access. Superadmins can grant impersonation.</li>
             <li><strong style={{ color: '#475569' }}>Superadmin</strong> — Full access: manage roles, teams, grant/revoke permissions. Set via Supabase SQL.</li>
           </ul>
         </div>

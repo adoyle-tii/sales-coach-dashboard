@@ -299,10 +299,12 @@ body {
 
 .badge-green { background: var(--green-light); color: var(--green); }
 .badge-red { background: var(--red-light); color: var(--red); }
-.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-amber  { background: var(--amber-light); color: var(--amber); }
 .badge-purple { background: var(--brand-light); color: var(--brand-dark); }
-.badge-blue { background: var(--blue-light); color: var(--blue); }
-.badge-slate { background: var(--slate-100); color: var(--slate-600); }
+.badge-indigo { background: #e0e7ff; color: #3730a3; }
+.badge-teal   { background: #ccfbf1; color: #0f766e; }
+.badge-blue   { background: var(--blue-light); color: var(--blue); }
+.badge-slate  { background: var(--slate-100); color: var(--slate-600); }
 
 /* ── Buttons ───────────────────────────────────────── */
 .btn {
