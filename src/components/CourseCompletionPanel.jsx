@@ -390,6 +390,9 @@ export default function CourseCompletionPanel({ completions, loading, error }) {
   const completedCourses = courses.filter((c) => isComplete(c.course_completion?.completion_status) && !isFailed(c.course_completion?.completion_status)).length;
   const inProgressCourses = courses.filter((c) => isInProgress(c.course_completion?.completion_status)).length;
   const avgLessonPct = courses.filter((c) => c.lesson_count > 0).reduce((s, c) => s + (c.lesson_pct ?? 0), 0) / (courses.filter((c) => c.lesson_count > 0).length || 1);
+  const totalSaCount = courses.reduce((s, c) => s + (c.sa_count ?? 0), 0);
+  const totalSaCompleted = courses.reduce((s, c) => s + (c.sa_completed ?? 0), 0);
+  const totalSaPct = totalSaCount > 0 ? Math.round((totalSaCompleted / totalSaCount) * 100) : 0;
   const saScored = courses.filter((c) => c.sa_avg_score != null);
   const overallSaAvg = saScored.length > 0
     ? Math.round((saScored.reduce((s, c) => s + c.sa_avg_score, 0) / saScored.length) * 10) / 10
@@ -415,6 +418,19 @@ export default function CourseCompletionPanel({ completions, loading, error }) {
           <div style={{ flex: 1, minWidth: '100px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#2563eb' }}>{Math.round(avgLessonPct)}%</div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>Avg lessons done</div>
+          </div>
+          <div style={{ flex: 1, minWidth: '100px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed' }}>
+              {totalSaCount > 0 ? `${totalSaCompleted}/${totalSaCount}` : '—'}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+              SAs complete
+              {totalSaCount > 0 && (
+                <span style={{ marginLeft: '4px', color: totalSaPct >= 80 ? '#16a34a' : totalSaPct >= 40 ? '#d97706' : '#7c3aed' }}>
+                  ({totalSaPct}%)
+                </span>
+              )}
+            </div>
           </div>
           <div style={{ flex: 1, minWidth: '100px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
