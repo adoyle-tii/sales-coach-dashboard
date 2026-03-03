@@ -60,6 +60,8 @@ export default function Admin() {
   const [createTeamLoading, setCreateTeamLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [impersonateId, setImpersonateId] = useState('');
+  const [deletingUserId, setDeletingUserId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Course Reporting state
   const [catalogueLoading, setCatalogueLoading] = useState(false);
@@ -154,6 +156,23 @@ export default function Admin() {
     if (error) { setMessage({ type: 'error', text: error.message }); return; }
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, can_impersonate: !!canImpersonate } : u)));
     setMessage({ type: 'success', text: canImpersonate ? 'Impersonation granted.' : 'Impersonation revoked.' });
+  }
+
+  async function deleteUser(userId) {
+    setDeletingUserId(userId); setMessage(null); setConfirmDeleteId(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { setMessage({ type: 'error', text: 'Not signed in.' }); return; }
+      const res = await fetch(`${WORKER_URL}/admin/delete-user?user_id=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMessage({ type: 'error', text: json.error || 'Failed to delete user.' }); return; }
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setMessage({ type: 'success', text: 'User removed.' });
+    } catch (e) { setMessage({ type: 'error', text: e?.message || 'Failed to delete user.' }); }
+    finally { setDeletingUserId(null); }
   }
 
   async function promoteByEmail() {
@@ -725,8 +744,8 @@ export default function Admin() {
                 <th>Role</th>
                 <th>Sub-role</th>
                 <th>Team</th>
-                {isSuperadmin && <th>Can impersonate</th>}
                 <th></th>
+                {isSuperadmin && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -789,24 +808,6 @@ export default function Admin() {
                       <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{shortTeamName(teamName(u.team_id))}</span>
                     )}
                   </td>
-                  {isSuperadmin && (
-                    <td>
-                      {u.role === 'admin' ? (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
-                          <input
-                            type="checkbox"
-                            checked={!!u.can_impersonate}
-                            onChange={(e) => updateCanImpersonate(u.id, e.target.checked)}
-                            disabled={saving === u.id}
-                            style={{ accentColor: '#7c3aed' }}
-                          />
-                          Allow
-                        </label>
-                      ) : (
-                        <span style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>—</span>
-                      )}
-                    </td>
-                  )}
                   <td>
                     {canImpersonate && u.id !== currentUserId && (
                       <button
@@ -818,6 +819,43 @@ export default function Admin() {
                       </button>
                     )}
                   </td>
+                  {isSuperadmin && (
+                    <td>
+                      {u.role !== 'superadmin' && u.role !== 'admin' && u.id !== currentUserId && (
+                        confirmDeleteId === u.id ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#dc2626', whiteSpace: 'nowrap' }}>Remove?</span>
+                            <button
+                              type="button"
+                              className="btn btn-xs"
+                              style={{ background: '#dc2626', color: '#fff', border: 'none', fontSize: '0.75rem', padding: '2px 8px' }}
+                              disabled={deletingUserId === u.id}
+                              onClick={() => deleteUser(u.id)}
+                            >
+                              {deletingUserId === u.id ? '…' : 'Yes'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            style={{ fontSize: '0.75rem', padding: '2px 8px', color: '#dc2626' }}
+                            onClick={() => setConfirmDeleteId(u.id)}
+                          >
+                            Remove
+                          </button>
+                        )
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
