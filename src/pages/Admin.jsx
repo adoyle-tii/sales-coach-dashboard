@@ -63,6 +63,20 @@ export default function Admin() {
   const [csvFiles, setCsvFiles] = useState({});
   const [courseReportingOpen, setCourseReportingOpen] = useState(false);
 
+  // User sync state
+  const [userSyncOpen, setUserSyncOpen] = useState(false);
+  const [userSyncLoading, setUserSyncLoading] = useState(false);
+  const [userSyncError, setUserSyncError] = useState(null);
+  const [userSyncSuccess, setUserSyncSuccess] = useState(null);
+  const [userSyncStatus, setUserSyncStatus] = useState(null);
+  const [groupMappings, setGroupMappings] = useState([]);      // current hs_group_role_mappings rows
+  const [rawGroups, setRawGroups] = useState([]);              // groups from last uploaded groups.csv
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [userCsvFiles, setUserCsvFiles] = useState({});        // users.csv, groups.csv, group_members.csv
+  const [mappingEdit, setMappingEdit] = useState(null);        // { hs_group_id, hs_group_name, app_role, sub_role }
+  const [mappingSaving, setMappingSaving] = useState(false);
+  const SUB_ROLES_WITH_SE = [...SUB_ROLES, { value: 'se', label: 'SE' }];
+
   useEffect(() => { supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id)); }, []);
   useEffect(() => { load(); }, []);
 
@@ -233,6 +247,96 @@ export default function Admin() {
       setCourseReportingOpen(false);
     }
   }, [courseReportingOpen, loadCatalogue]);
+
+  async function loadGroupsAndMappings() {
+    try {
+      const authH = await getAuthHeaders();
+      const [gRes, sRes] = await Promise.all([
+        fetch(`${WORKER_URL}/admin/hs-groups`, { headers: { 'Content-Type': 'application/json', ...authH } }),
+        fetch(`${WORKER_URL}/admin/hs-sync-users`, { headers: { 'Content-Type': 'application/json', ...authH } }),
+      ]);
+      if (gRes.ok) {
+        const gj = await gRes.json();
+        setGroupMappings(gj.mappings || []);
+        setRawGroups(gj.raw_groups || []);
+      }
+      if (sRes.ok) setUserSyncStatus(await sRes.json());
+      setGroupsLoaded(true);
+    } catch { /* ignore */ }
+  }
+
+  function onUserCsvFile(key, file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setUserCsvFiles((prev) => ({ ...prev, [key]: e.target.result }));
+    reader.readAsText(file);
+  }
+
+  async function saveGroupMapping(mapping) {
+    setMappingSaving(true);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/hs-group-role-mapping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify(mapping),
+      });
+      if (res.ok) {
+        setGroupMappings((prev) => {
+          const idx = prev.findIndex((m) => m.hs_group_id === mapping.hs_group_id);
+          return idx >= 0 ? prev.map((m, i) => i === idx ? { ...m, ...mapping } : m) : [...prev, mapping];
+        });
+        setMappingEdit(null);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setUserSyncError(j.error || 'Failed to save mapping.');
+      }
+    } catch (e) { setUserSyncError(e.message); }
+    finally { setMappingSaving(false); }
+  }
+
+  async function deleteGroupMapping(groupId) {
+    const authH = await getAuthHeaders();
+    const res = await fetch(`${WORKER_URL}/admin/hs-group-role-mapping?group_id=${encodeURIComponent(groupId)}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json', ...authH },
+    });
+    if (res.ok) setGroupMappings((prev) => prev.filter((m) => m.hs_group_id !== groupId));
+  }
+
+  async function triggerUserSync() {
+    setUserSyncLoading(true); setUserSyncError(null); setUserSyncSuccess(null);
+    try {
+      const authH = await getAuthHeaders();
+      const steps = [
+        { table: 'users_extended', csv: userCsvFiles.users },
+        { table: 'groups',         csv: userCsvFiles.groups },
+        { table: 'group_members',  csv: userCsvFiles.group_members },
+      ];
+      for (const step of steps) {
+        if (!step.csv) continue;
+        const form = new FormData();
+        form.append('csv', new Blob([step.csv], { type: 'text/plain' }), 'data.csv');
+        const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=${step.table}`, {
+          method: 'POST', headers: { ...authH }, body: form,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) { setUserSyncError(`Upload failed on ${step.table}: ${json.error || res.status}`); return; }
+      }
+      const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_users`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authH }, body: JSON.stringify({}),
+      });
+      const finalJson = await finalRes.json().catch(() => ({}));
+      if (!finalRes.ok) { setUserSyncError(`Sync failed: ${finalJson.error || finalRes.status}`); return; }
+      const s = finalJson.stats || {};
+      setUserSyncSuccess(
+        `User sync complete — ${s.users_updated ?? 0} users updated, ${s.teams_upserted ?? 0} teams updated.` +
+        (s.users_skipped ? ` ${s.users_skipped} skipped (no matching Supabase Auth account).` : '')
+      );
+      setUserSyncStatus(s);
+      await load(); // refresh user list
+    } catch (e) { setUserSyncError(e.message || 'User sync failed.'); }
+    finally { setUserSyncLoading(false); }
+  }
 
   async function saveTrackedCourses() {
     setSettingsSaving(true);
@@ -856,7 +960,7 @@ export default function Admin() {
                   { key: 'course_members',                 label: 'course_members.csv' },
                   { key: 'user_course_lesson_completions', label: 'user_course_lesson_completions.csv' },
                   { key: 'rubric_ratings',                 label: 'rubric_ratings.csv' },
-                  { key: 'users',                          label: 'users.csv (required for user ID matching)' },
+                  { key: 'users',                          label: 'users.csv (required for Highspot user ID matching)' },
                 ].map(({ key, label }) => (
                   <div key={key} className="form-group" style={{ marginBottom: '10px' }}>
                     <label className="form-label">{label}</label>
@@ -889,6 +993,189 @@ export default function Admin() {
                   style={{ marginTop: '8px' }}
                 >
                   {ingestLoading ? 'Importing…' : 'Run import'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================
+          User Sync (Highspot groups → roles + manager assignment)
+          ================================================================ */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div className="card-header" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+            if (!userSyncOpen) { setUserSyncOpen(true); loadGroupsAndMappings(); }
+            else setUserSyncOpen(false);
+          }}>
+            <h2 className="card-title">User sync from Highspot</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{userSyncOpen ? '▲ collapse' : '▼ configure'}</span>
+          </div>
+
+          {userSyncOpen && (
+            <div className="card-body">
+              <p style={{ fontSize: '0.8375rem', color: '#64748b', margin: '0 0 16px' }}>
+                Map Highspot groups to application roles, then upload the CSV exports to automatically
+                provision users, assign roles, and link reporting managers.
+              </p>
+
+              {/* ── Last sync status ── */}
+              {userSyncStatus?.synced_at && (
+                <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
+                  Last sync: {new Date(userSyncStatus.synced_at).toLocaleString()}
+                  {' · '}{userSyncStatus.users_updated ?? 0} users updated
+                  {userSyncStatus.teams_upserted ? ` · ${userSyncStatus.teams_upserted} teams` : ''}
+                  {userSyncStatus.users_skipped ? <span style={{ color: '#92400e' }}> · {userSyncStatus.users_skipped} skipped (no auth account)</span> : ''}
+                </div>
+              )}
+
+              {/* ── Group → Role Mappings ── */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Group → Role mappings</h3>
+                  <button
+                    type="button" className="btn btn-ghost"
+                    style={{ fontSize: '0.8rem', padding: '4px 10px' }}
+                    onClick={() => setMappingEdit({ hs_group_id: '', hs_group_name: '', app_role: 'rep', sub_role: '' })}
+                  >
+                    + Add mapping
+                  </button>
+                </div>
+
+                {groupMappings.length === 0 && !mappingEdit && (
+                  <p style={{ fontSize: '0.8125rem', color: '#94a3b8', margin: '0 0 8px' }}>
+                    No mappings configured yet. Add one to start syncing users.
+                  </p>
+                )}
+
+                {/* Existing mappings table */}
+                {groupMappings.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', marginBottom: '8px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: '#64748b', fontWeight: 600 }}>Group name</th>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: '#64748b', fontWeight: 600 }}>Group ID</th>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: '#64748b', fontWeight: 600 }}>App role</th>
+                        <th style={{ textAlign: 'left', padding: '4px 8px', color: '#64748b', fontWeight: 600 }}>Sub-role</th>
+                        <th style={{ padding: '4px 8px' }} />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupMappings.map((m) => (
+                        <tr key={m.hs_group_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '6px 8px', fontWeight: 500 }}>{m.hs_group_name || '—'}</td>
+                          <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b' }}>{m.hs_group_id}</td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <span className={`badge ${m.app_role === 'manager' ? 'badge-blue' : m.app_role === 'admin' ? 'badge-purple' : 'badge-slate'}`}>{m.app_role}</span>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#64748b' }}>{m.sub_role || '—'}</td>
+                          <td style={{ padding: '6px 8px', display: 'flex', gap: '6px' }}>
+                            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                              onClick={() => setMappingEdit({ ...m })}>Edit</button>
+                            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '2px 8px', color: '#dc2626' }}
+                              onClick={() => deleteGroupMapping(m.hs_group_id)}>Remove</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {/* Add / Edit mapping form */}
+                {mappingEdit && (
+                  <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Highspot Group ID</label>
+                        <input className="form-input" value={mappingEdit.hs_group_id}
+                          onChange={(e) => setMappingEdit((p) => ({ ...p, hs_group_id: e.target.value }))}
+                          placeholder="ObjectId from groups.csv" style={{ fontSize: '0.8rem' }} />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Group name (display)</label>
+                        <input className="form-input" value={mappingEdit.hs_group_name || ''}
+                          onChange={(e) => setMappingEdit((p) => ({ ...p, hs_group_name: e.target.value }))}
+                          placeholder="e.g. Role - AEs" style={{ fontSize: '0.8rem' }} />
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>App role</label>
+                        <select className="form-input" value={mappingEdit.app_role}
+                          onChange={(e) => setMappingEdit((p) => ({ ...p, app_role: e.target.value }))}
+                          style={{ fontSize: '0.8rem' }}>
+                          {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Sub-role</label>
+                        <select className="form-input" value={mappingEdit.sub_role || ''}
+                          onChange={(e) => setMappingEdit((p) => ({ ...p, sub_role: e.target.value || null }))}
+                          style={{ fontSize: '0.8rem' }}>
+                          {SUB_ROLES_WITH_SE.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quick-pick from last uploaded groups.csv if available */}
+                    {rawGroups.length > 0 && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Or pick from last uploaded groups.csv</label>
+                        <select className="form-input" style={{ fontSize: '0.8rem' }} defaultValue=""
+                          onChange={(e) => {
+                            const g = rawGroups.find((x) => x.id === e.target.value);
+                            if (g) setMappingEdit((p) => ({ ...p, hs_group_id: g.id, hs_group_name: g.name }));
+                          }}>
+                          <option value="">— select group —</option>
+                          {rawGroups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.id})</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button type="button" className="btn btn-primary" style={{ fontSize: '0.8rem' }}
+                        disabled={!mappingEdit.hs_group_id || !mappingEdit.app_role || mappingSaving}
+                        onClick={() => saveGroupMapping(mappingEdit)}>
+                        {mappingSaving ? 'Saving…' : 'Save mapping'}
+                      </button>
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: '0.8rem' }}
+                        onClick={() => setMappingEdit(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── CSV Upload + Sync ── */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: '0.9rem', fontWeight: 600 }}>Upload Highspot user exports</h3>
+                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0 0 12px' }}>
+                  Upload <code>users.csv</code>, <code>groups.csv</code>, and <code>group_members.csv</code> from
+                  your Highspot Data Lake export. Users in mapped groups will have their role, sub-role,
+                  and manager automatically set.
+                </p>
+
+                {[
+                  { key: 'users',         label: 'users.csv (id, email, first_name, last_name, manager_id)' },
+                  { key: 'groups',        label: 'groups.csv (id, name, visibility)' },
+                  { key: 'group_members', label: 'group_members.csv (id = group_id, user_id)' },
+                ].map(({ key, label }) => (
+                  <div key={key} className="form-group" style={{ marginBottom: '10px' }}>
+                    <label className="form-label">{label}</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input type="file" accept=".csv,text/csv" style={{ fontSize: '0.8125rem' }}
+                        onChange={(e) => onUserCsvFile(key, e.target.files?.[0])} />
+                      {userCsvFiles[key] && <span style={{ fontSize: '0.75rem', color: '#16a34a' }}>✓ loaded</span>}
+                    </div>
+                  </div>
+                ))}
+
+                {userSyncError && <div className="alert alert-error" style={{ margin: '10px 0' }}>{userSyncError}</div>}
+                {userSyncSuccess && <div className="alert alert-success" style={{ margin: '10px 0' }}>{userSyncSuccess}</div>}
+
+                <button type="button" className="btn btn-success"
+                  onClick={triggerUserSync}
+                  disabled={userSyncLoading || Object.keys(userCsvFiles).length === 0}
+                  style={{ marginTop: '8px' }}>
+                  {userSyncLoading ? 'Syncing…' : 'Sync users'}
                 </button>
               </div>
             </div>
