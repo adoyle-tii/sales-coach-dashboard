@@ -131,6 +131,13 @@ function SkillsAssessmentRow({ lesson }) {
   const statusLbl = saStatusLabel(comp);
   const statusClr = saStatusColor(comp);
   const isReviewed = !!(comp?.reviewed_at || isComplete(comp?.completion_status));
+  // rubric_score is the primary score (avg of rubric criteria, scale 1–5).
+  // Fall back to percent_correct (0–100) converted to a 1–5 scale if rubric_score absent.
+  const displayScore = comp?.rubric_score != null
+    ? { value: Math.round(comp.rubric_score * 10) / 10, outOf: 5, isPct: false }
+    : comp?.percent_correct != null
+      ? { value: Math.round(comp.percent_correct), outOf: 100, isPct: true }
+      : null;
 
   return (
     <>
@@ -142,17 +149,24 @@ function SkillsAssessmentRow({ lesson }) {
           </span>
         </td>
         <td style={{ padding: '6px 8px', fontSize: '0.8125rem', color: '#64748b' }}>
-          {isReviewed && comp?.reviewed_at
+          {comp?.reviewed_at
             ? new Date(comp.reviewed_at).toLocaleDateString()
             : comp?.submitted_at
               ? new Date(comp.submitted_at).toLocaleDateString()
               : '—'}
         </td>
         <td style={{ padding: '6px 8px', fontSize: '0.8125rem', fontWeight: 600 }}>
-          {isReviewed && comp?.rubric_score != null ? (
-            <span style={{ color: comp.rubric_score >= 4 ? '#16a34a' : comp.rubric_score >= 3 ? '#d97706' : '#dc2626' }}>
-              {(Math.round(comp.rubric_score * 10) / 10).toFixed(1)} / 5
-            </span>
+          {isReviewed && displayScore != null ? (
+            (() => {
+              const { value, outOf, isPct } = displayScore;
+              const pct = isPct ? value : (value / outOf) * 100;
+              const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
+              return (
+                <span style={{ color }}>
+                  {isPct ? `${value}%` : `${value.toFixed(1)} / 5`}
+                </span>
+              );
+            })()
           ) : statusLbl === 'Submitted' ? (
             <span style={{ fontSize: '0.75rem', color: '#7c3aed' }}>Pending review</span>
           ) : '—'}
