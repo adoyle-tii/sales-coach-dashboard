@@ -531,21 +531,27 @@ export default function Team() {
                 {teamCourses.map((course) => {
                   const pct = course.completion_pct ?? 0;
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+                  const saPct = course.sa_completion_pct ?? 0;
+                  const saBarColor = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
+                  const saAvg = course.sa_avg_score;
+                  const saAvgColor = saAvg == null ? '#7c3aed' : saAvg >= 4 ? '#16a34a' : saAvg >= 3 ? '#d97706' : '#dc2626';
                   return (
-                    <div key={course.hs_item_id}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <div key={course.hs_item_id} style={{ paddingBottom: '16px', borderBottom: '1px solid #f1f5f9' }}>
+                      {/* Course name + competency tag */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b', flex: 1 }}>{course.name}</span>
                         {course.competency && (
                           <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>
                             {course.competency}
                           </span>
                         )}
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: barColor, minWidth: '36px', textAlign: 'right' }}>{pct}%</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ flex: 1, height: '10px', borderRadius: '5px', background: '#e2e8f0', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '5px', transition: 'width 0.4s ease' }} />
+                      {/* Lesson completion bar */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                        <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
                         </div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor, minWidth: '36px', textAlign: 'right' }}>{pct}%</span>
                         <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{course.completed} / {course.member_count} complete</span>
                         {course.started > course.completed && (
                           <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>
@@ -553,6 +559,23 @@ export default function Team() {
                           </span>
                         )}
                       </div>
+                      {/* Skills Assessment rollup row */}
+                      {course.sa_count > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+                          <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#ede9fe', overflow: 'hidden' }}>
+                            <div style={{ width: `${saPct}%`, height: '100%', background: saBarColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                          </div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: saBarColor, minWidth: '36px', textAlign: 'right' }}>{saPct}%</span>
+                          <span style={{ fontSize: '0.72rem', color: '#7c3aed', whiteSpace: 'nowrap' }}>
+                            {course.sa_members_complete} / {course.member_count} have completed assessments
+                          </span>
+                          {saAvg != null && (
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: saAvgColor, whiteSpace: 'nowrap', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '10px', padding: '1px 7px' }}>
+                              avg {saAvg.toFixed(1)} / 5
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

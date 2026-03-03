@@ -53,6 +53,8 @@ export default function Admin() {
   const [trackedCourseIds, setTrackedCourseIds] = useState([]);
   // courseOverrides: { [defaultCourseId]: { sub_role: 'sdr'|'csm'|'ae'|'am', override_course_id: string } }
   const [courseOverrides, setCourseOverrides] = useState({});
+  // courseExclusions: { [courseId]: string[] }  — sub_role values that should NOT see this course
+  const [courseExclusions, setCourseExclusions] = useState({});
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [ingestStatus, setIngestStatus] = useState(null);
   const [ingestLoading, setIngestLoading] = useState(false);
@@ -205,6 +207,7 @@ export default function Admin() {
         const sj = await settingsRes.json();
         setTrackedCourseIds(sj.trackedCourseIds || []);
         setCourseOverrides(sj.courseOverrides || {});
+        setCourseExclusions(sj.courseExclusions || {});
       }
     } catch (e) {
       setCatalogueError(e.message || 'Network error loading catalogue.');
@@ -238,7 +241,7 @@ export default function Admin() {
       const res = await fetch(`${WORKER_URL}/admin/hs-settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
-        body: JSON.stringify({ trackedCourseIds, courseOverrides }),
+        body: JSON.stringify({ trackedCourseIds, courseOverrides, courseExclusions }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setMessage({ type: 'error', text: json.error || 'Failed to save course settings.' }); }
@@ -770,6 +773,37 @@ export default function Admin() {
                                             </select>
                                           </>
                                         )}
+                                      </div>
+                                    )}
+                                    {/* Exclusion config: show on all tracked courses */}
+                                    {isTracked && (
+                                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>Exclude for:</span>
+                                        {SUB_ROLES.filter(r => r.value).map((r) => {
+                                          const excluded = (courseExclusions[c.hs_item_id] || []).includes(r.value);
+                                          return (
+                                            <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', cursor: 'pointer', color: excluded ? '#dc2626' : '#475569' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={excluded}
+                                                onChange={() => {
+                                                  setCourseExclusions((prev) => {
+                                                    const current = prev[c.hs_item_id] || [];
+                                                    const next = excluded
+                                                      ? current.filter((v) => v !== r.value)
+                                                      : [...current, r.value];
+                                                    if (next.length === 0) {
+                                                      const n = { ...prev }; delete n[c.hs_item_id]; return n;
+                                                    }
+                                                    return { ...prev, [c.hs_item_id]: next };
+                                                  });
+                                                }}
+                                                style={{ accentColor: '#dc2626', width: '13px', height: '13px' }}
+                                              />
+                                              {r.label}
+                                            </label>
+                                          );
+                                        })}
                                       </div>
                                     )}
                                   </div>

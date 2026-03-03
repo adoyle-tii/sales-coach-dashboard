@@ -52,16 +52,33 @@ function StatusBadge({ status }) {
   );
 }
 
-function ProgressBar({ pct }) {
+function ProgressBar({ pct, color }) {
   const safe = Math.min(100, Math.max(0, pct ?? 0));
-  const color = safe === 100 ? '#16a34a' : safe > 0 ? '#2563eb' : '#e2e8f0';
+  const barColor = color || (safe === 100 ? '#16a34a' : safe > 0 ? '#2563eb' : '#e2e8f0');
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden' }}>
-        <div style={{ width: `${safe}%`, height: '100%', borderRadius: '4px', background: color, transition: 'width 0.4s ease' }} />
+        <div style={{ width: `${safe}%`, height: '100%', borderRadius: '4px', background: barColor, transition: 'width 0.4s ease' }} />
       </div>
       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', minWidth: '32px', textAlign: 'right' }}>{safe}%</span>
     </div>
+  );
+}
+
+function SAScoreBadge({ score }) {
+  if (score == null) return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#f3e8ff', border: '1px solid #c4b5fd', fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed' }}>
+      —
+    </span>
+  );
+  const rounded = Math.round(score * 10) / 10;
+  const color = rounded >= 4 ? '#16a34a' : rounded >= 3 ? '#d97706' : '#dc2626';
+  const bg = rounded >= 4 ? '#dcfce7' : rounded >= 3 ? '#fef3c7' : '#fee2e2';
+  const border = rounded >= 4 ? '#86efac' : rounded >= 3 ? '#fde68a' : '#fca5a5';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: bg, border: `1px solid ${border}`, fontSize: '0.7rem', fontWeight: 700, color }}>
+      {rounded.toFixed(1)}
+    </span>
   );
 }
 
@@ -91,29 +108,54 @@ function LessonRow({ lesson }) {
   );
 }
 
+function saStatusLabel(comp) {
+  if (!comp) return 'Not started';
+  if (comp.reviewed_at || isComplete(comp.completion_status)) return 'Complete';
+  if (comp.submitted_at) return 'Submitted';
+  if (isInProgress(comp.completion_status)) return 'In progress';
+  return 'Not started';
+}
+
+function saStatusColor(comp) {
+  const label = saStatusLabel(comp);
+  if (label === 'Complete')    return '#16a34a';
+  if (label === 'Submitted')   return '#7c3aed';
+  if (label === 'In progress') return '#d97706';
+  return '#94a3b8';
+}
+
 function SkillsAssessmentRow({ lesson }) {
   const comp = lesson.completion;
   const [detailOpen, setDetailOpen] = useState(false);
   const hasDetail = Array.isArray(comp?.rubric_detail) && comp.rubric_detail.length > 0;
+  const statusLbl = saStatusLabel(comp);
+  const statusClr = saStatusColor(comp);
+  const isReviewed = !!(comp?.reviewed_at || isComplete(comp?.completion_status));
+
   return (
     <>
-      <tr style={{ background: '#fafafa' }}>
-        <td style={{ padding: '6px 8px', fontSize: '0.8125rem', color: '#374151' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {lesson.name}
-            <span style={{ fontSize: '0.7rem', background: '#7c3aed18', color: '#7c3aed', border: '1px solid #7c3aed30', borderRadius: '4px', padding: '1px 5px', fontWeight: 600 }}>
-              Skills Assessment
-            </span>
-          </div>
-        </td>
+      <tr style={{ background: '#faf5ff' }}>
+        <td style={{ padding: '6px 8px', fontSize: '0.8125rem', color: '#374151' }}>{lesson.name}</td>
         <td style={{ padding: '6px 8px' }}>
-          {comp ? <StatusBadge status={comp.completion_status || (comp.reviewed_at ? 'reviewed' : comp.submitted_at ? 'submitted' : 'not_started')} /> : <StatusBadge status={null} />}
+          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 600, background: `${statusClr}18`, color: statusClr, border: `1px solid ${statusClr}40`, whiteSpace: 'nowrap' }}>
+            {statusLbl}
+          </span>
         </td>
         <td style={{ padding: '6px 8px', fontSize: '0.8125rem', color: '#64748b' }}>
-          {comp?.reviewed_at ? new Date(comp.reviewed_at).toLocaleDateString() : (comp?.submitted_at ? new Date(comp.submitted_at).toLocaleDateString() : '—')}
+          {isReviewed && comp?.reviewed_at
+            ? new Date(comp.reviewed_at).toLocaleDateString()
+            : comp?.submitted_at
+              ? new Date(comp.submitted_at).toLocaleDateString()
+              : '—'}
         </td>
-        <td style={{ padding: '6px 8px' }}>
-          <ScoreChip score={comp?.rubric_score} />
+        <td style={{ padding: '6px 8px', fontSize: '0.8125rem', fontWeight: 600 }}>
+          {isReviewed && comp?.rubric_score != null ? (
+            <span style={{ color: comp.rubric_score >= 4 ? '#16a34a' : comp.rubric_score >= 3 ? '#d97706' : '#dc2626' }}>
+              {(Math.round(comp.rubric_score * 10) / 10).toFixed(1)} / 5
+            </span>
+          ) : statusLbl === 'Submitted' ? (
+            <span style={{ fontSize: '0.75rem', color: '#7c3aed' }}>Pending review</span>
+          ) : '—'}
         </td>
         <td style={{ padding: '6px 8px' }}>
           {hasDetail && (
@@ -129,12 +171,13 @@ function SkillsAssessmentRow({ lesson }) {
       </tr>
       {detailOpen && hasDetail && (
         <tr>
-          <td colSpan={5} style={{ padding: '0 8px 10px 24px', background: '#f8fafc' }}>
+          <td colSpan={5} style={{ padding: '0 8px 10px 24px', background: '#f5f3ff' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left', padding: '4px 6px', color: '#64748b', fontWeight: 600 }}>Criterion</th>
                   <th style={{ textAlign: 'right', padding: '4px 6px', color: '#64748b', fontWeight: 600 }}>Rating</th>
+                  <th style={{ textAlign: 'left', padding: '4px 6px', color: '#64748b', fontWeight: 600 }}>Feedback</th>
                 </tr>
               </thead>
               <tbody>
@@ -144,6 +187,7 @@ function SkillsAssessmentRow({ lesson }) {
                     <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 600, color: d.criterion_rating >= 4 ? '#16a34a' : d.criterion_rating >= 3 ? '#d97706' : '#dc2626' }}>
                       {d.criterion_rating}
                     </td>
+                    <td style={{ padding: '3px 6px', color: '#64748b', fontSize: '0.78rem' }}>{d.criterion_feedback || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -160,6 +204,9 @@ function CourseCard({ course }) {
   const hasLessons = course.lessons?.length > 0;
   const hasAssessments = course.skills_assessments?.length > 0;
   const courseStatus = course.course_completion?.completion_status;
+  const saCount = course.sa_count ?? 0;
+  const saCompleted = course.sa_completed ?? 0;
+  const saPct = saCount > 0 ? Math.round((saCompleted / saCount) * 100) : 0;
 
   return (
     <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
@@ -188,14 +235,28 @@ function CourseCard({ course }) {
             )}
             <StatusBadge status={courseStatus} />
           </div>
-          {course.lesson_count > 0 && (
-            <div style={{ marginTop: '8px', maxWidth: '400px' }}>
-              <ProgressBar pct={course.lesson_pct ?? 0} />
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
-                {course.lessons_completed} / {course.lesson_count} lessons complete
+          {/* Dual progress bars */}
+          <div style={{ marginTop: '10px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {course.lesson_count > 0 && (
+              <div style={{ flex: '1 1 200px', minWidth: '160px' }}>
+                <ProgressBar pct={course.lesson_pct ?? 0} />
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                  {course.lessons_completed} / {course.lesson_count} lessons complete
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {saCount > 0 && (
+              <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ minWidth: '120px' }}>
+                  <ProgressBar pct={saPct} color={saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0'} />
+                  <div style={{ fontSize: '0.72rem', color: '#7c3aed', marginTop: '2px' }}>
+                    {saCompleted} / {saCount} assessments{course.sa_submitted > 0 ? ` · ${course.sa_submitted} pending` : ''}
+                  </div>
+                </div>
+                <SAScoreBadge score={course.sa_avg_score} />
+              </div>
+            )}
+          </div>
         </div>
         <span style={{ fontSize: '0.8125rem', color: '#94a3b8', flexShrink: 0 }}>{open ? '▲' : '▼'}</span>
       </button>
@@ -300,9 +361,12 @@ export default function CourseCompletionPanel({ completions, loading, error }) {
 
   const totalCourses = courses.length;
   const completedCourses = courses.filter((c) => isComplete(c.course_completion?.completion_status) && !isFailed(c.course_completion?.completion_status)).length;
-  const failedCourses = courses.filter((c) => isFailed(c.course_completion?.completion_status)).length;
-  const inProgressCourses = courses.filter((c) => isInProgress(c.course_completion?.completion_status) || isFailed(c.course_completion?.completion_status)).length;
+  const inProgressCourses = courses.filter((c) => isInProgress(c.course_completion?.completion_status)).length;
   const avgLessonPct = courses.filter((c) => c.lesson_count > 0).reduce((s, c) => s + (c.lesson_pct ?? 0), 0) / (courses.filter((c) => c.lesson_count > 0).length || 1);
+  const saScored = courses.filter((c) => c.sa_avg_score != null);
+  const overallSaAvg = saScored.length > 0
+    ? Math.round((saScored.reduce((s, c) => s + c.sa_avg_score, 0) / saScored.length) * 10) / 10
+    : null;
 
   return (
     <div className="card section">
@@ -326,8 +390,14 @@ export default function CourseCompletionPanel({ completions, loading, error }) {
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>Avg lessons done</div>
           </div>
           <div style={{ flex: 1, minWidth: '100px', padding: '12px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed' }}>{totalCourses - completedCourses - inProgressCourses}</div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>Not started</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              {overallSaAvg != null ? (
+                <SAScoreBadge score={overallSaAvg} />
+              ) : (
+                <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed' }}>—</span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>Avg SA score</div>
           </div>
         </div>
 
