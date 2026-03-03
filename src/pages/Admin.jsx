@@ -272,16 +272,31 @@ export default function Admin() {
       // lists + item_lists are small and sent as JSON alongside for tag-dependent tables.
 
       // Pre-extract lesson items from items CSV (SmartPage/SCORMLesson kinds) for name lookup
+      // Pre-extract lesson/course items from items CSV for name+kind lookup in course_lessons step.
+      // Uses a proper quote-aware splitter to avoid misalignment on fields containing commas.
       let lessonItemsCsv = '';
       if (csvFiles.items) {
+        const splitCsvLine = (line, sep = ',') => {
+          const vals = [];
+          let cur = '', inQ = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') { inQ = !inQ; }
+            else if (ch === sep && !inQ) { vals.push(cur.replace(/^"|"$/g, '').trim()); cur = ''; }
+            else { cur += ch; }
+          }
+          vals.push(cur.replace(/^"|"$/g, '').trim());
+          return vals;
+        };
         const lines = csvFiles.items.split('\n');
         const header = lines[0];
-        const kindIdx = header.split(',').findIndex((h) => h.trim().replace(/"/g, '') === 'kind');
+        const headerCols = splitCsvLine(header);
+        const kindIdx = headerCols.findIndex((h) => h === 'kind');
         if (kindIdx >= 0) {
           const lessonKinds = new Set(['smartpage', 'scormlesson', 'smartpagelesson', 'course']);
           const lessonLines = lines.slice(1).filter((l) => {
-            const cols = l.split(',');
-            return lessonKinds.has((cols[kindIdx] || '').trim().toLowerCase().replace(/"/g, ''));
+            const cols = splitCsvLine(l);
+            return lessonKinds.has((cols[kindIdx] || '').toLowerCase());
           });
           lessonItemsCsv = [header, ...lessonLines].join('\n');
         }
