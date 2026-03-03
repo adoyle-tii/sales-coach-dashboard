@@ -270,6 +270,23 @@ export default function Admin() {
       // Each table is a separate request to stay within Cloudflare's 50 subrequest limit.
       // Large CSVs are sent as multipart: csv as plain text body, metadata as query params.
       // lists + item_lists are small and sent as JSON alongside for tag-dependent tables.
+
+      // Pre-extract lesson items from items CSV (SmartPage/SCORMLesson kinds) for name lookup
+      let lessonItemsCsv = '';
+      if (csvFiles.items) {
+        const lines = csvFiles.items.split('\n');
+        const header = lines[0];
+        const kindIdx = header.split(',').findIndex((h) => h.trim().replace(/"/g, '') === 'kind');
+        if (kindIdx >= 0) {
+          const lessonKinds = new Set(['smartpage', 'scormlesson', 'smartpagelesson', 'course']);
+          const lessonLines = lines.slice(1).filter((l) => {
+            const cols = l.split(',');
+            return lessonKinds.has((cols[kindIdx] || '').trim().toLowerCase().replace(/"/g, ''));
+          });
+          lessonItemsCsv = [header, ...lessonLines].join('\n');
+        }
+      }
+
       const steps = [
         { table: 'items',              csv: csvFiles.items,                          stat: 'courses' },
         { table: 'course_lessons',     csv: csvFiles.course_lessons,                 stat: 'lessons' },
@@ -287,6 +304,10 @@ export default function Admin() {
         if (step.table === 'items' || step.table === 'course_lessons') {
           if (csvFiles.lists)      form.append('lists',      new Blob([csvFiles.lists],      { type: 'text/plain' }), 'lists.csv');
           if (csvFiles.item_lists) form.append('item_lists', new Blob([csvFiles.item_lists], { type: 'text/plain' }), 'item_lists.csv');
+        }
+        // Send filtered lesson items for name lookup in course_lessons step
+        if (step.table === 'course_lessons' && lessonItemsCsv) {
+          form.append('items_meta', new Blob([lessonItemsCsv], { type: 'text/plain' }), 'items_meta.csv');
         }
 
         const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=${step.table}`, {
