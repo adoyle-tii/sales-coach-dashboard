@@ -265,89 +265,59 @@ export default function Admin() {
     setIngestLoading(true); setIngestError(null); setIngestSuccess(null);
     try {
       const authH = await getAuthHeaders();
-      const stats = { courses: 0, lessons: 0, course_completions: 0, lesson_completions: 0, rubric_ratings: 0, errors: [] };
 
-      // Each table is a separate request to stay within Cloudflare's 50 subrequest limit.
-      // Large CSVs are sent as multipart: csv as plain text body, metadata as query params.
-      // lists + item_lists are small and sent as JSON alongside for tag-dependent tables.
-
-      // Pre-extract lesson items from items CSV (SmartPage/SCORMLesson kinds) for name lookup
-      // Pre-extract lesson/course items from items CSV for name+kind lookup in course_lessons step.
-      // Uses a proper quote-aware splitter to avoid misalignment on fields containing commas.
-      let lessonItemsCsv = '';
-      if (csvFiles.items) {
-        const splitCsvLine = (line, sep = ',') => {
-          const vals = [];
-          let cur = '', inQ = false;
-          for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (ch === '"') { inQ = !inQ; }
-            else if (ch === sep && !inQ) { vals.push(cur.replace(/^"|"$/g, '').trim()); cur = ''; }
-            else { cur += ch; }
-          }
-          vals.push(cur.replace(/^"|"$/g, '').trim());
-          return vals;
-        };
-        const lines = csvFiles.items.split('\n');
-        const header = lines[0];
-        const headerCols = splitCsvLine(header);
-        const kindIdx = headerCols.findIndex((h) => h === 'kind');
-        if (kindIdx >= 0) {
-          const lessonKinds = new Set(['smartpage', 'scormlesson', 'smartpagelesson', 'course']);
-          const lessonLines = lines.slice(1).filter((l) => {
-            const cols = splitCsvLine(l);
-            return lessonKinds.has((cols[kindIdx] || '').toLowerCase());
-          });
-          lessonItemsCsv = [header, ...lessonLines].join('\n');
-        }
-      }
-
+      // Each CSV is uploaded to its raw staging table as a separate request.
+      // No filtering or joining here — that all happens server-side in hs_finalize_ingest().
       const steps = [
-        { table: 'items',              csv: csvFiles.items,                          stat: 'courses' },
-        { table: 'course_lessons',     csv: csvFiles.course_lessons,                 stat: 'lessons' },
-        { table: 'course_members',     csv: csvFiles.course_members,                 stat: 'course_completions' },
-        { table: 'lesson_completions', csv: csvFiles.user_course_lesson_completions, stat: 'lesson_completions' },
-        { table: 'rubric_ratings',     csv: csvFiles.rubric_ratings,                 stat: 'rubric_ratings' },
+        { table: 'items',              csv: csvFiles.items },
+        { table: 'course_lessons',     csv: csvFiles.course_lessons },
+        { table: 'course_members',     csv: csvFiles.course_members },
+        { table: 'lesson_completions', csv: csvFiles.user_course_lesson_completions },
+        { table: 'rubric_ratings',     csv: csvFiles.rubric_ratings },
+        { table: 'users',              csv: csvFiles.users },
       ];
 
       for (const step of steps) {
         if (!step.csv) continue;
 
-        // Build a FormData body — csv as a plain text blob, lists/item_lists as separate fields
         const form = new FormData();
         form.append('csv', new Blob([step.csv], { type: 'text/plain' }), 'data.csv');
-        if (step.table === 'items' || step.table === 'course_lessons') {
-          if (csvFiles.lists)      form.append('lists',      new Blob([csvFiles.lists],      { type: 'text/plain' }), 'lists.csv');
-          if (csvFiles.item_lists) form.append('item_lists', new Blob([csvFiles.item_lists], { type: 'text/plain' }), 'item_lists.csv');
-        }
-        // Send filtered lesson items for name lookup in course_lessons step
-        if (step.table === 'course_lessons' && lessonItemsCsv) {
-          form.append('items_meta', new Blob([lessonItemsCsv], { type: 'text/plain' }), 'items_meta.csv');
-        }
 
         const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=${step.table}`, {
           method: 'POST',
-          headers: { ...authH },  // no Content-Type — browser sets it with boundary for FormData
+          headers: { ...authH },
           body: form,
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setIngestError(`Failed on ${step.table}: ${json.error || res.status}`);
+          setIngestError(`Upload failed on ${step.table}: ${json.error || res.status}`);
           setIngestLoading(false);
           return;
         }
-        if (json.count) stats[step.stat] = (stats[step.stat] || 0) + json.count;
-        if (json.errors?.length) stats.errors.push(...json.errors);
+        if (json.errors?.length) console.warn(`${step.table} upload warnings:`, json.errors);
       }
 
-      // Finalize: write sync timestamp
-      await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize`, {
+      // Finalize: call hs_finalize_ingest() SQL function which does all joins/filtering
+      const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
-        body: JSON.stringify({ stats }),
+        body: JSON.stringify({}),
       });
+      const finalJson = await finalRes.json().catch(() => ({}));
 
-      setIngestSuccess(`Ingest complete — ${stats.courses} courses, ${stats.lessons} lessons, ${stats.course_completions} course completions, ${stats.lesson_completions} lesson completions, ${stats.rubric_ratings} rubric ratings.${stats.errors.length ? ` ${stats.errors.length} errors.` : ''}`);
+      if (!finalRes.ok) {
+        setIngestError(`Finalize failed: ${finalJson.error || finalRes.status}`);
+        setIngestLoading(false);
+        return;
+      }
+
+      const s = finalJson.stats || {};
+      const skipped = s.skipped_users ? ` (${s.skipped_users} Highspot users not matched to system accounts)` : '';
+      setIngestSuccess(
+        `Ingest complete — ${s.courses ?? 0} courses, ${s.lessons ?? 0} lessons, ` +
+        `${s.course_completions ?? 0} course completions, ${s.lesson_completions ?? 0} lesson completions, ` +
+        `${s.rubric_ratings ?? 0} rubric ratings.${skipped}`
+      );
       loadIngestStatus();
     } catch (e) {
       setIngestError(e.message || 'Ingest failed.');
@@ -847,13 +817,12 @@ export default function Admin() {
                 )}
 
                 {[
-                  { key: 'items', label: 'items.csv' },
-                  { key: 'course_lessons', label: 'course_lessons.csv' },
-                  { key: 'course_members', label: 'course_members.csv' },
+                  { key: 'items',                          label: 'items.csv' },
+                  { key: 'course_lessons',                 label: 'course_lessons.csv' },
+                  { key: 'course_members',                 label: 'course_members.csv' },
                   { key: 'user_course_lesson_completions', label: 'user_course_lesson_completions.csv' },
-                  { key: 'rubric_ratings', label: 'rubric_ratings.csv' },
-                  { key: 'lists', label: 'lists.csv (optional)' },
-                  { key: 'item_lists', label: 'item_lists.csv (optional)' },
+                  { key: 'rubric_ratings',                 label: 'rubric_ratings.csv' },
+                  { key: 'users',                          label: 'users.csv (required for user ID matching)' },
                 ].map(({ key, label }) => (
                   <div key={key} className="form-group" style={{ marginBottom: '10px' }}>
                     <label className="form-label">{label}</label>
