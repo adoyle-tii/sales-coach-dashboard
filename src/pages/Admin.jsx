@@ -328,9 +328,11 @@ export default function Admin() {
       const finalJson = await finalRes.json().catch(() => ({}));
       if (!finalRes.ok) { setUserSyncError(`Sync failed: ${finalJson.error || finalRes.status}`); return; }
       const s = finalJson.stats || {};
+      const created = s.users_created ?? 0;
+      const updated = s.users_updated ?? 0;
       setUserSyncSuccess(
-        `User sync complete — ${s.users_updated ?? 0} users updated, ${s.teams_upserted ?? 0} teams updated.` +
-        (s.users_skipped ? ` ${s.users_skipped} skipped (no matching Supabase Auth account).` : '')
+        `User sync complete — ${created} users created, ${updated} users updated, ${s.teams_upserted ?? 0} teams updated.` +
+        (s.users_skipped ? ` ${s.users_skipped} skipped (no Supabase Auth account yet).` : '')
       );
       setUserSyncStatus(s);
       await load(); // refresh user list
@@ -1024,7 +1026,7 @@ export default function Admin() {
               {userSyncStatus?.synced_at && (
                 <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
                   Last sync: {new Date(userSyncStatus.synced_at).toLocaleString()}
-                  {' · '}{userSyncStatus.users_updated ?? 0} users updated
+                  {' · '}{userSyncStatus.users_created ?? 0} created · {userSyncStatus.users_updated ?? 0} updated
                   {userSyncStatus.teams_upserted ? ` · ${userSyncStatus.teams_upserted} teams` : ''}
                   {userSyncStatus.users_skipped ? <span style={{ color: '#92400e' }}> · {userSyncStatus.users_skipped} skipped (no auth account)</span> : ''}
                 </div>
