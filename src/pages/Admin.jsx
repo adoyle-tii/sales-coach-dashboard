@@ -421,10 +421,10 @@ export default function Admin() {
     setRebuildingReportsTo(true); setHierarchyError(null); setRebuildReportsToResult(null);
     try {
       const authH = await getAuthHeaders();
-      // Step 1: upload users.csv to staging
+      // Step 1: upload users.csv to hs_raw_users_extended staging
       const formData = new FormData();
       formData.append('file', usersFile);
-      const uploadRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=users`, {
+      const uploadRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=users_extended`, {
         method: 'POST',
         headers: { ...authH },
         body: formData,
