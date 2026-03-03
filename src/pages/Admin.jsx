@@ -307,6 +307,8 @@ export default function Admin() {
     setUserSyncLoading(true); setUserSyncError(null); setUserSyncSuccess(null);
     try {
       const authH = await getAuthHeaders();
+
+      // Step 1: Upload the three CSVs to staging tables
       const steps = [
         { table: 'users_extended', csv: userCsvFiles.users },
         { table: 'groups',         csv: userCsvFiles.groups },
@@ -322,20 +324,34 @@ export default function Admin() {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) { setUserSyncError(`Upload failed on ${step.table}: ${json.error || res.status}`); return; }
       }
+
+      // Step 2: Provision Supabase Auth accounts for mapped users who don't have one yet
+      const provRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=provision_users`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authH }, body: JSON.stringify({}),
+      });
+      const provJson = await provRes.json().catch(() => ({}));
+      if (!provRes.ok) { setUserSyncError(`Provision step failed: ${provJson.error || provRes.status}`); return; }
+      const provisioned = provJson.provisioned ?? 0;
+      const provErrors = provJson.errors?.length ?? 0;
+
+      // Step 3: Finalize — set roles, sub_roles, manager teams
       const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_users`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...authH }, body: JSON.stringify({}),
       });
       const finalJson = await finalRes.json().catch(() => ({}));
-      if (!finalRes.ok) { setUserSyncError(`Sync failed: ${finalJson.error || finalRes.status}`); return; }
+      if (!finalRes.ok) { setUserSyncError(`Finalize failed: ${finalJson.error || finalRes.status}`); return; }
+
       const s = finalJson.stats || {};
-      const created = s.users_created ?? 0;
-      const updated = s.users_updated ?? 0;
-      setUserSyncSuccess(
-        `User sync complete — ${created} users created, ${updated} users updated, ${s.teams_upserted ?? 0} teams updated.` +
-        (s.users_skipped ? ` ${s.users_skipped} skipped (no Supabase Auth account yet).` : '')
-      );
-      setUserSyncStatus(s);
-      await load(); // refresh user list
+      const parts = [
+        provisioned > 0 ? `${provisioned} new accounts created` : null,
+        `${s.users_updated ?? 0} profiles updated`,
+        `${s.teams_upserted ?? 0} teams synced`,
+        s.users_skipped ? `${s.users_skipped} skipped` : null,
+        provErrors > 0 ? `${provErrors} account creation errors (check console)` : null,
+      ].filter(Boolean);
+      setUserSyncSuccess(`User sync complete — ${parts.join(', ')}.`);
+      setUserSyncStatus({ ...s, provisioned });
+      await load();
     } catch (e) { setUserSyncError(e.message || 'User sync failed.'); }
     finally { setUserSyncLoading(false); }
   }
@@ -1026,7 +1042,8 @@ export default function Admin() {
               {userSyncStatus?.synced_at && (
                 <div style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
                   Last sync: {new Date(userSyncStatus.synced_at).toLocaleString()}
-                  {' · '}{userSyncStatus.users_created ?? 0} created · {userSyncStatus.users_updated ?? 0} updated
+                  {userSyncStatus.provisioned ? ` · ${userSyncStatus.provisioned} accounts created` : ''}
+                  {' · '}{userSyncStatus.users_updated ?? 0} profiles updated
                   {userSyncStatus.teams_upserted ? ` · ${userSyncStatus.teams_upserted} teams` : ''}
                   {userSyncStatus.users_skipped ? <span style={{ color: '#92400e' }}> · {userSyncStatus.users_skipped} skipped (no auth account)</span> : ''}
                 </div>
