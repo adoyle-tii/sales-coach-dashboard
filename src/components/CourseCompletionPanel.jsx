@@ -262,10 +262,10 @@ function CourseCard({ course }) {
             )}
             <StatusBadge status={courseStatus} />
           </div>
-          {/* Dual progress bars */}
-          <div style={{ marginTop: '10px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {/* Dual progress bars — lessons 65%, SA 35% */}
+          <div style={{ marginTop: '10px', display: 'flex', gap: '16px', alignItems: 'flex-start', width: '100%' }}>
             {course.lesson_count > 0 && (
-              <div style={{ flex: '1 1 140px', maxWidth: '280px', minWidth: '120px' }}>
+              <div style={{ flex: '0 0 65%', minWidth: 0 }}>
                 <ProgressBar pct={course.lesson_pct ?? 0} />
                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
                   {course.lessons_completed} / {course.lesson_count} lessons complete
@@ -273,8 +273,8 @@ function CourseCard({ course }) {
               </div>
             )}
             {saCount > 0 && (
-              <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ minWidth: '110px' }}>
+              <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <ProgressBar pct={saPct} color={saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0'} />
                   <div style={{ fontSize: '0.72rem', color: '#7c3aed', marginTop: '2px' }}>
                     {saCompleted} / {saCount} assessments{course.sa_submitted > 0 ? ` · ${course.sa_submitted} pending` : ''}
