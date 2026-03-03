@@ -11,6 +11,14 @@ const ROLES = [
   { value: 'admin', label: 'Admin' },
 ];
 
+const SUB_ROLES = [
+  { value: '', label: 'Standard Rep' },
+  { value: 'ae', label: 'AE' },
+  { value: 'sdr', label: 'SDR' },
+  { value: 'csm', label: 'CSM' },
+  { value: 'am', label: 'AM' },
+];
+
 function RoleBadge({ role }) {
   const map = { superadmin: 'badge-amber', admin: 'badge-purple', manager: 'badge-blue', rep: 'badge-slate' };
   return <span className={`badge ${map[role] || 'badge-slate'}`}>{role}</span>;
@@ -43,6 +51,8 @@ export default function Admin() {
   const [catalogue, setCatalogue] = useState([]);
   const [catalogueError, setCatalogueError] = useState(null);
   const [trackedCourseIds, setTrackedCourseIds] = useState([]);
+  // courseOverrides: { [defaultCourseId]: { sub_role: 'sdr'|'csm'|'ae'|'am', override_course_id: string } }
+  const [courseOverrides, setCourseOverrides] = useState({});
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [ingestStatus, setIngestStatus] = useState(null);
   const [ingestLoading, setIngestLoading] = useState(false);
@@ -59,7 +69,7 @@ export default function Admin() {
     setError(null);
     try {
       const [uRes, tRes] = await Promise.all([
-        supabase.from('users').select('id, email, full_name, role, team_id, can_impersonate').order('email'),
+        supabase.from('users').select('id, email, full_name, role, sub_role, team_id, can_impersonate').order('email'),
         supabase.from('teams').select('id, name, manager_id').order('name'),
       ]);
       if (uRes?.error) setError(uRes.error.message || 'Failed to load users.');
@@ -86,6 +96,15 @@ export default function Admin() {
     if (error) { setMessage({ type: 'error', text: error.message }); return; }
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, team_id: teamId || null } : u)));
     setMessage({ type: 'success', text: 'Team updated.' });
+  }
+
+  async function updateSubRole(userId, subRole) {
+    setSaving(userId); setMessage(null);
+    const { error } = await supabase.from('users').update({ sub_role: subRole || null, updated_at: new Date().toISOString() }).eq('id', userId);
+    setSaving(null);
+    if (error) { setMessage({ type: 'error', text: error.message }); return; }
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, sub_role: subRole || null } : u)));
+    setMessage({ type: 'success', text: 'Sub-role updated.' });
   }
 
   async function updateCanImpersonate(userId, canImpersonate) {
@@ -185,6 +204,7 @@ export default function Admin() {
       if (settingsRes.ok) {
         const sj = await settingsRes.json();
         setTrackedCourseIds(sj.trackedCourseIds || []);
+        setCourseOverrides(sj.courseOverrides || {});
       }
     } catch (e) {
       setCatalogueError(e.message || 'Network error loading catalogue.');
@@ -218,7 +238,7 @@ export default function Admin() {
       const res = await fetch(`${WORKER_URL}/admin/hs-settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
-        body: JSON.stringify({ trackedCourseIds }),
+        body: JSON.stringify({ trackedCourseIds, courseOverrides }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setMessage({ type: 'error', text: json.error || 'Failed to save course settings.' }); }
@@ -459,6 +479,7 @@ export default function Admin() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Sub-role</th>
                 <th>Team</th>
                 {isSuperadmin && <th>Can impersonate</th>}
                 <th></th>
@@ -491,6 +512,21 @@ export default function Admin() {
                       </select>
                     ) : (
                       <RoleBadge role={u.role} />
+                    )}
+                  </td>
+                  <td>
+                    {isSuperadmin && (u.role === 'rep') ? (
+                      <select
+                        className="form-select"
+                        value={u.sub_role || ''}
+                        onChange={(e) => updateSubRole(u.id, e.target.value || null)}
+                        disabled={saving === u.id}
+                        style={{ padding: '4px 8px', fontSize: '0.8125rem', minWidth: '100px' }}
+                      >
+                        {SUB_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{u.sub_role ? u.sub_role.toUpperCase() : '—'}</span>
                     )}
                   </td>
                   <td>
@@ -614,34 +650,93 @@ export default function Admin() {
                   }, {});
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {Object.entries(byCompetency).sort(([a], [b]) => a.localeCompare(b)).map(([competency, courses]) => (
-                        <div key={competency}>
-                          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            {competency}
+                      {Object.entries(byCompetency).sort(([a], [b]) => a.localeCompare(b)).map(([competency, courses]) => {
+                        const hasMultiple = courses.length > 1;
+                        return (
+                          <div key={competency}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {competency}
+                              {hasMultiple && (
+                                <span style={{ marginLeft: '8px', fontWeight: 400, textTransform: 'none', fontSize: '0.75rem', color: '#7c3aed' }}>
+                                  {courses.length} variants — assign sub-roles below
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {courses.map((c) => {
+                                const isTracked = trackedCourseIds.includes(c.hs_item_id);
+                                // Find if this course is an override target for another course
+                                const overrideEntry = Object.entries(courseOverrides).find(([, v]) => v.override_course_id === c.hs_item_id);
+                                const isOverrideTarget = !!overrideEntry;
+                                // Find if this course has an override configured
+                                const myOverride = courseOverrides[c.hs_item_id];
+                                return (
+                                  <div key={c.hs_item_id} style={{ borderRadius: '8px', background: isTracked ? '#eff6ff' : '#f8fafc', border: `1px solid ${isTracked ? '#bfdbfe' : '#e2e8f0'}`, padding: '8px 12px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.875rem' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={isTracked}
+                                        onChange={() => toggleTrackedCourse(c.hs_item_id)}
+                                        style={{ accentColor: '#2563eb', width: '15px', height: '15px' }}
+                                      />
+                                      <span style={{ fontWeight: 500 }}>{c.name}</span>
+                                      {isOverrideTarget && (
+                                        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#7c3aed', background: '#f3e8ff', borderRadius: '4px', padding: '2px 6px' }}>
+                                          Override for {SUB_ROLES.find(r => r.value === overrideEntry[1].sub_role)?.label || overrideEntry[1].sub_role}
+                                        </span>
+                                      )}
+                                    </label>
+                                    {/* Override config: only show on tracked courses when the competency has multiple variants */}
+                                    {hasMultiple && isTracked && !isOverrideTarget && (
+                                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Sub-role override:</span>
+                                        <select
+                                          className="form-select"
+                                          style={{ fontSize: '0.75rem', padding: '2px 8px', minWidth: '120px' }}
+                                          value={myOverride?.sub_role || ''}
+                                          onChange={(e) => {
+                                            const subRole = e.target.value;
+                                            if (!subRole) {
+                                              setCourseOverrides((prev) => { const n = { ...prev }; delete n[c.hs_item_id]; return n; });
+                                            } else {
+                                              setCourseOverrides((prev) => ({ ...prev, [c.hs_item_id]: { ...prev[c.hs_item_id], sub_role: subRole } }));
+                                            }
+                                          }}
+                                        >
+                                          <option value="">Default (all reps)</option>
+                                          {SUB_ROLES.filter(r => r.value).map((r) => <option key={r.value} value={r.value}>{r.label} only</option>)}
+                                        </select>
+                                        {myOverride?.sub_role && (
+                                          <>
+                                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>replaced by:</span>
+                                            <select
+                                              className="form-select"
+                                              style={{ fontSize: '0.75rem', padding: '2px 8px', minWidth: '180px' }}
+                                              value={myOverride?.override_course_id || ''}
+                                              onChange={(e) => {
+                                                const overrideCourseId = e.target.value;
+                                                setCourseOverrides((prev) => ({
+                                                  ...prev,
+                                                  [c.hs_item_id]: { ...prev[c.hs_item_id], override_course_id: overrideCourseId }
+                                                }));
+                                              }}
+                                            >
+                                              <option value="">Select override course…</option>
+                                              {courses.filter((oc) => oc.hs_item_id !== c.hs_item_id).map((oc) => (
+                                                <option key={oc.hs_item_id} value={oc.hs_item_id}>{oc.name}</option>
+                                              ))}
+                                            </select>
+                                          </>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {courses.map((c) => (
-                              <label
-                                key={c.hs_item_id}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', background: trackedCourseIds.includes(c.hs_item_id) ? '#eff6ff' : '#f8fafc', border: `1px solid ${trackedCourseIds.includes(c.hs_item_id) ? '#bfdbfe' : '#e2e8f0'}`, fontSize: '0.875rem' }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={trackedCourseIds.includes(c.hs_item_id)}
-                                  onChange={() => toggleTrackedCourse(c.hs_item_id)}
-                                  style={{ accentColor: '#2563eb', width: '15px', height: '15px' }}
-                                />
-                                <span style={{ fontWeight: 500 }}>{c.name}</span>
-                                {c.lesson_type && (
-                                  <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', borderRadius: '4px', padding: '2px 6px' }}>
-                                    {c.lesson_type === 'skills_assessment' ? 'Skills Assessment' : 'Lesson'}
-                                  </span>
-                                )}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()}
