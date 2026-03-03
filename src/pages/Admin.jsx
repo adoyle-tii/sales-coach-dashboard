@@ -265,18 +265,54 @@ export default function Admin() {
     setIngestLoading(true); setIngestError(null); setIngestSuccess(null);
     try {
       const authH = await getAuthHeaders();
-      const res = await fetch(`${WORKER_URL}/admin/hs-ingest`, {
+      const stats = { courses: 0, lessons: 0, course_completions: 0, lesson_completions: 0, rubric_ratings: 0, errors: [] };
+
+      // Each table is a separate request to stay within Cloudflare's 50 subrequest limit.
+      // Large CSVs are sent as multipart: csv as plain text body, metadata as query params.
+      // lists + item_lists are small and sent as JSON alongside for tag-dependent tables.
+      const steps = [
+        { table: 'items',              csv: csvFiles.items,                          stat: 'courses' },
+        { table: 'course_lessons',     csv: csvFiles.course_lessons,                 stat: 'lessons' },
+        { table: 'course_members',     csv: csvFiles.course_members,                 stat: 'course_completions' },
+        { table: 'lesson_completions', csv: csvFiles.user_course_lesson_completions, stat: 'lesson_completions' },
+        { table: 'rubric_ratings',     csv: csvFiles.rubric_ratings,                 stat: 'rubric_ratings' },
+      ];
+
+      for (const step of steps) {
+        if (!step.csv) continue;
+
+        // Build a FormData body — csv as a plain text blob, lists/item_lists as separate fields
+        const form = new FormData();
+        form.append('csv', new Blob([step.csv], { type: 'text/plain' }), 'data.csv');
+        if (step.table === 'items' || step.table === 'course_lessons') {
+          if (csvFiles.lists)      form.append('lists',      new Blob([csvFiles.lists],      { type: 'text/plain' }), 'lists.csv');
+          if (csvFiles.item_lists) form.append('item_lists', new Blob([csvFiles.item_lists], { type: 'text/plain' }), 'item_lists.csv');
+        }
+
+        const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=${step.table}`, {
+          method: 'POST',
+          headers: { ...authH },  // no Content-Type — browser sets it with boundary for FormData
+          body: form,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setIngestError(`Failed on ${step.table}: ${json.error || res.status}`);
+          setIngestLoading(false);
+          return;
+        }
+        if (json.count) stats[step.stat] = (stats[step.stat] || 0) + json.count;
+        if (json.errors?.length) stats.errors.push(...json.errors);
+      }
+
+      // Finalize: write sync timestamp
+      await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
-        body: JSON.stringify(csvFiles),
+        body: JSON.stringify({ stats }),
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setIngestError(json.error || 'Ingest failed.'); }
-      else {
-        const s = json.stats || {};
-        setIngestSuccess(`Ingest complete — ${s.courses ?? 0} courses, ${s.lessons ?? 0} lessons, ${s.course_completions ?? 0} course completions, ${s.lesson_completions ?? 0} lesson completions, ${s.rubric_ratings ?? 0} rubric ratings.`);
-        loadIngestStatus();
-      }
+
+      setIngestSuccess(`Ingest complete — ${stats.courses} courses, ${stats.lessons} lessons, ${stats.course_completions} course completions, ${stats.lesson_completions} lesson completions, ${stats.rubric_ratings} rubric ratings.${stats.errors.length ? ` ${stats.errors.length} errors.` : ''}`);
+      loadIngestStatus();
     } catch (e) {
       setIngestError(e.message || 'Ingest failed.');
     } finally {
