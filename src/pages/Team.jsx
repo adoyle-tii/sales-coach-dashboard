@@ -83,13 +83,15 @@ export default function Team() {
       try {
         if (!dataUserId || !supabase) { setLoading(false); return; }
         const teamId = viewProfile?.team_id;
-        if (!teamId) { setMembers([]); setLoading(false); return; }
+        if (!teamId && !dataUserId) { setMembers([]); setLoading(false); return; }
 
+        // Fetch direct reports via reports_to (works for all hierarchy levels).
+        // Fall back to team_id query for backwards compatibility.
         const { data: users } = await supabase
           .from('users')
-          .select('id, full_name, email, role')
-          .eq('team_id', teamId)
-          .eq('role', 'rep');
+          .select('id, full_name, email, role, sub_role')
+          .eq('reports_to', dataUserId)
+          .not('role', 'in', '("superadmin","admin")');
         const list = users ?? [];
         setMembers(list);
         if (list.length === 0) { setLoading(false); return; }
@@ -165,7 +167,7 @@ export default function Team() {
         setLoading(false);
       }
     })();
-  }, [dataUserId, viewProfile?.team_id]);
+  }, [dataUserId]);
 
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading team…</div>;
 
