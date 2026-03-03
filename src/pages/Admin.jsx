@@ -466,6 +466,7 @@ export default function Admin() {
   const userList = users || [];
   const teamList = teams || [];
   const teamName = (id) => teamList.find((t) => t.id === id)?.name || '—';
+  const shortTeamName = (name) => name?.replace(/'s Team$/i, '') ?? name;
   const isSuperadmin = realProfile?.role === 'superadmin';
   const canImpersonate = isSuperadmin || realProfile?.can_impersonate;
 
@@ -622,7 +623,7 @@ export default function Admin() {
                 <label className="form-label">Team</label>
                 <select className="form-select" value={createTeamId} onChange={(e) => setCreateTeamId(e.target.value)}>
                   <option value="">No team</option>
-                  {teamList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {teamList.map((t) => <option key={t.id} value={t.id}>{shortTeamName(t.name)}</option>)}
                 </select>
               </div>
               <button type="button" className="btn btn-success" onClick={createUser} disabled={createUserLoading || !createEmail.trim()}>
@@ -706,10 +707,10 @@ export default function Admin() {
                         style={{ padding: '4px 8px', fontSize: '0.8125rem', minWidth: '120px' }}
                       >
                         <option value="">No team</option>
-                        {teamList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        {teamList.map((t) => <option key={t.id} value={t.id}>{shortTeamName(t.name)}</option>)}
                       </select>
                     ) : (
-                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{teamName(u.team_id)}</span>
+                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{shortTeamName(teamName(u.team_id))}</span>
                     )}
                   </td>
                   {isSuperadmin && (
