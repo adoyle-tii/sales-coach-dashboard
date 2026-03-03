@@ -63,6 +63,14 @@ export default function Admin() {
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  // Users table filters + sort
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterRole, setFilterRole] = useState('');
+  const [filterSubRole, setFilterSubRole] = useState('');
+  const [filterTeam, setFilterTeam] = useState('');
+  const [sortField, setSortField] = useState('full_name');
+  const [sortDir, setSortDir] = useState('asc');
+
   // Course Reporting state
   const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [catalogue, setCatalogue] = useState([]);
@@ -565,6 +573,37 @@ export default function Admin() {
   const isSuperadmin = realProfile?.role === 'superadmin';
   const canImpersonate = isSuperadmin || realProfile?.can_impersonate;
 
+  function toggleSort(field) {
+    if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortField(field); setSortDir('asc'); }
+  }
+
+  const filteredUsers = userList
+    .filter((u) => {
+      const q = filterSearch.toLowerCase();
+      if (q && !((u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))) return false;
+      if (filterRole && u.role !== filterRole) return false;
+      if (filterSubRole && (u.sub_role || '') !== filterSubRole) return false;
+      if (filterTeam === '__none__' && u.team_id) return false;
+      if (filterTeam && filterTeam !== '__none__' && u.team_id !== filterTeam) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      let av, bv;
+      if (sortField === 'full_name') { av = (a.full_name || a.email || '').toLowerCase(); bv = (b.full_name || b.email || '').toLowerCase(); }
+      else if (sortField === 'email') { av = (a.email || '').toLowerCase(); bv = (b.email || '').toLowerCase(); }
+      else if (sortField === 'role') { av = a.role || ''; bv = b.role || ''; }
+      else if (sortField === 'sub_role') { av = a.sub_role || ''; bv = b.sub_role || ''; }
+      else if (sortField === 'team') { av = shortTeamName(teamName(a.team_id)) || ''; bv = shortTeamName(teamName(b.team_id)) || ''; }
+      else { av = ''; bv = ''; }
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <span style={{ color: '#cbd5e1', marginLeft: '4px' }}>↕</span>;
+    return <span style={{ color: '#2563eb', marginLeft: '4px' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -733,23 +772,85 @@ export default function Admin() {
       <div className="card section">
         <div className="card-header">
           <h2 className="card-title">All users</h2>
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{userList.length} total</span>
+          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+            {filteredUsers.length !== userList.length ? `${filteredUsers.length} of ${userList.length}` : `${userList.length} total`}
+          </span>
         </div>
+
+        {/* Filter bar */}
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '2 1 180px' }}>
+            <input
+              className="form-input"
+              type="search"
+              placeholder="Search name or email…"
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              style={{ fontSize: '0.8125rem', padding: '6px 10px' }}
+            />
+          </div>
+          <div style={{ flex: '1 1 110px' }}>
+            <select className="form-select" value={filterRole} onChange={(e) => setFilterRole(e.target.value)} style={{ fontSize: '0.8125rem', padding: '6px 10px' }}>
+              <option value="">All roles</option>
+              {[...ROLES, { value: 'superadmin', label: 'Superadmin' }].map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 110px' }}>
+            <select className="form-select" value={filterSubRole} onChange={(e) => setFilterSubRole(e.target.value)} style={{ fontSize: '0.8125rem', padding: '6px 10px' }}>
+              <option value="">All sub-roles</option>
+              {SUB_ROLES.filter((r) => r.value).map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 150px' }}>
+            <select className="form-select" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} style={{ fontSize: '0.8125rem', padding: '6px 10px' }}>
+              <option value="">All teams</option>
+              <option value="__none__">No team</option>
+              {teamList.map((t) => (
+                <option key={t.id} value={t.id}>{shortTeamName(t.name)}</option>
+              ))}
+            </select>
+          </div>
+          {(filterSearch || filterRole || filterSubRole || filterTeam) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: '0.8125rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
+              onClick={() => { setFilterSearch(''); setFilterRole(''); setFilterSubRole(''); setFilterTeam(''); }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Sub-role</th>
-                <th>Team</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('full_name')}>
+                  Name <SortIcon field="full_name" />
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('email')}>
+                  Email <SortIcon field="email" />
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('role')}>
+                  Role <SortIcon field="role" />
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('sub_role')}>
+                  Sub-role <SortIcon field="sub_role" />
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('team')}>
+                  Team <SortIcon field="team" />
+                </th>
                 <th></th>
                 {isSuperadmin && <th></th>}
               </tr>
             </thead>
             <tbody>
-              {userList.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr key={u.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -860,10 +961,10 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
-          {userList.length === 0 && (
+          {filteredUsers.length === 0 && (
             <div className="empty-state">
               <div className="empty-icon">👤</div>
-              <div>No users yet. Users appear after they sign in.</div>
+              <div>{userList.length === 0 ? 'No users yet. Users appear after they sign in.' : 'No users match the current filters.'}</div>
             </div>
           )}
         </div>
