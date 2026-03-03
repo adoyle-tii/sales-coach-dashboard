@@ -57,8 +57,18 @@ function safeScores(a) {
     : {};
 }
 
+const HIERARCHY_ROLES = ['leader', 'senior_leader', 'executive'];
+
 export default function Team() {
   const { dataUserId, viewProfile } = useImpersonation();
+  const myRole = viewProfile?.role || 'rep';
+  const isHierarchy = HIERARCHY_ROLES.includes(myRole);
+
+  // Hierarchy view state (for leaders/senior_leaders/executives)
+  const [directReports, setDirectReports] = useState([]); // their direct reports (managers/leaders/RVPs)
+  const [reportStats, setReportStats] = useState({});     // per-report rollup stats
+
+  // Standard manager view state
   const [members, setMembers] = useState([]);
   const [plansByUser, setPlansByUser] = useState({});
   const [assessmentsByUser, setAssessmentsByUser] = useState({});
@@ -82,92 +92,108 @@ export default function Team() {
     (async () => {
       try {
         if (!dataUserId || !supabase) { setLoading(false); return; }
-        const teamId = viewProfile?.team_id;
-        if (!teamId && !dataUserId) { setMembers([]); setLoading(false); return; }
 
-        // Fetch direct reports via reports_to (works for all hierarchy levels).
-        // Fall back to team_id query for backwards compatibility.
-        const { data: users } = await supabase
-          .from('users')
-          .select('id, full_name, email, role, sub_role')
-          .eq('reports_to', dataUserId)
-          .not('role', 'in', '("superadmin","admin")');
-        const list = users ?? [];
-        setMembers(list);
-        if (list.length === 0) { setLoading(false); return; }
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        const token = authSession?.access_token;
+        const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
 
-        const ids = list.map((m) => m.id);
+        if (isHierarchy) {
+          // ── Hierarchy view: load direct reports (managers/leaders/RVPs) ──
+          const { data: reports } = await supabase
+            .from('users')
+            .select('id, full_name, email, role, sub_role, team_id')
+            .eq('reports_to', dataUserId);
+          const reportList = (reports ?? []).filter((u) => !['superadmin','admin'].includes(u.role));
+          setDirectReports(reportList);
 
-        const [plansRes, assessRes, sessRes, actRes] = await Promise.all([
-          supabase.from('development_plans')
-            .select('user_id, focus_areas, last_updated, status')
-            .in('user_id', ids)
-            .eq('status', 'active'),
-          supabase.from('skill_assessments')
-            .select('id, user_id, skill_scores, overall_score, created_at, meeting_date, competency')
-            .in('user_id', ids)
-            .order('created_at', { ascending: false })
-            .limit(500),
-          supabase.from('coaching_sessions')
-            .select('id, user_id, session_date')
-            .in('user_id', ids)
-            .order('session_date', { ascending: false })
-            .limit(500),
-          supabase.from('action_items')
-            .select('id, user_id, status')
-            .in('user_id', ids)
-            .limit(1000),
-        ]);
+          // For each direct report, fetch their downstream stats via the worker
+          const statsMap = {};
+          await Promise.all(reportList.map(async (report) => {
+            try {
+              const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(report.id)}`, { headers: authHeaders });
+              const cData = cRes.ok ? await cRes.json().catch(() => ({})) : {};
 
-        const byUserPlans = {};
-        (plansRes.data ?? []).forEach((p) => { byUserPlans[p.user_id] = p; });
-        setPlansByUser(byUserPlans);
+              // Also fetch downstream rep count
+              const { count } = await supabase
+                .from('users')
+                .select('id', { count: 'exact', head: true })
+                .eq('reports_to', report.id);
 
-        const byUserAssess = {};
-        (assessRes.data ?? []).forEach((a) => {
-          if (!byUserAssess[a.user_id]) byUserAssess[a.user_id] = [];
-          byUserAssess[a.user_id].push(a);
-        });
-        setAssessmentsByUser(byUserAssess);
+              statsMap[report.id] = {
+                courses: cData.courses || [],
+                memberCount: cData.memberCount || 0,
+                directReportCount: count || 0,
+              };
+            } catch { statsMap[report.id] = { courses: [], memberCount: 0, directReportCount: 0 }; }
+          }));
+          setReportStats(statsMap);
 
-        const byUserSess = {};
-        (sessRes.data ?? []).forEach((s) => {
-          if (!byUserSess[s.user_id]) byUserSess[s.user_id] = [];
-          byUserSess[s.user_id].push(s);
-        });
-        setSessionsByUser(byUserSess);
-
-        const byUserActs = {};
-        (actRes.data ?? []).forEach((a) => {
-          if (!byUserActs[a.user_id]) byUserActs[a.user_id] = [];
-          byUserActs[a.user_id].push(a);
-        });
-        setActionsByUser(byUserActs);
-
-        // Fetch team course completion (non-blocking)
-        if (teamId) {
+          // Also load overall course rollup for self
           setTeamCoursesLoading(true);
           try {
-            const { data: { session: authSession } } = await supabase.auth.getSession();
-            const token = authSession?.access_token;
-            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(teamId)}`, {
-              headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
-            });
-            if (cRes.ok) {
-              const cData = await cRes.json().catch(() => ({}));
-              setTeamCourses(cData.courses || []);
-            }
-          } catch { /* ignore */ } finally {
-            setTeamCoursesLoading(false);
-          }
+            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
+            if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
+          } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
+
+        } else {
+          // ── Standard manager view: load direct rep reports ──
+          const { data: users } = await supabase
+            .from('users')
+            .select('id, full_name, email, role, sub_role')
+            .eq('reports_to', dataUserId)
+            .not('role', 'in', '("superadmin","admin")');
+          const list = users ?? [];
+          setMembers(list);
+          if (list.length === 0) { setLoading(false); return; }
+
+          const ids = list.map((m) => m.id);
+          const [plansRes, assessRes, sessRes, actRes] = await Promise.all([
+            supabase.from('development_plans').select('user_id, focus_areas, last_updated, status').in('user_id', ids).eq('status', 'active'),
+            supabase.from('skill_assessments').select('id, user_id, skill_scores, overall_score, created_at, meeting_date, competency').in('user_id', ids).order('created_at', { ascending: false }).limit(500),
+            supabase.from('coaching_sessions').select('id, user_id, session_date').in('user_id', ids).order('session_date', { ascending: false }).limit(500),
+            supabase.from('action_items').select('id, user_id, status').in('user_id', ids).limit(1000),
+          ]);
+
+          const byUserPlans = {};
+          (plansRes.data ?? []).forEach((p) => { byUserPlans[p.user_id] = p; });
+          setPlansByUser(byUserPlans);
+
+          const byUserAssess = {};
+          (assessRes.data ?? []).forEach((a) => {
+            if (!byUserAssess[a.user_id]) byUserAssess[a.user_id] = [];
+            byUserAssess[a.user_id].push(a);
+          });
+          setAssessmentsByUser(byUserAssess);
+
+          const byUserSess = {};
+          (sessRes.data ?? []).forEach((s) => {
+            if (!byUserSess[s.user_id]) byUserSess[s.user_id] = [];
+            byUserSess[s.user_id].push(s);
+          });
+          setSessionsByUser(byUserSess);
+
+          const byUserActs = {};
+          (actRes.data ?? []).forEach((a) => {
+            if (!byUserActs[a.user_id]) byUserActs[a.user_id] = [];
+            byUserActs[a.user_id].push(a);
+          });
+          setActionsByUser(byUserActs);
+
+          // Course completion rollup
+          setTeamCoursesLoading(true);
+          try {
+            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
+            if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
+          } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
         }
+
       } catch {
         setMembers([]);
       } finally {
         setLoading(false);
       }
     })();
-  }, [dataUserId]);
+  }, [dataUserId, isHierarchy]);
 
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading team…</div>;
 
@@ -283,6 +309,144 @@ export default function Team() {
     openActions: 'Open actions', pdp: 'PDP progress',
   };
   const sortBadgeText = `${SORT_LABELS[sortCol] || sortCol} ${sortDir === 'asc' ? '↑' : '↓'}`;
+
+  const roleLabelMap = { leader: 'Leader', senior_leader: 'Senior Leader', executive: 'Executive', manager: 'Manager', rep: 'Rep' };
+
+  // ── Hierarchy view for leaders / senior leaders / executives ──────────────
+  if (isHierarchy) {
+    const totalReps = Object.values(reportStats).reduce((s, r) => s + r.memberCount, 0);
+    const overallCourses = teamCourses;
+
+    return (
+      <div>
+        <div className="page-header">
+          <h1 className="page-title">Org overview</h1>
+          <p className="page-subtitle">
+            Full downstream breakdown for your reporting line.
+          </p>
+        </div>
+
+        {/* Top-level stats */}
+        <div className="stats-grid" style={{ marginBottom: '24px' }}>
+          <div className="stat-card">
+            <div className="stat-value">{directReports.length}</div>
+            <div className="stat-label">Direct reports</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: '#7c3aed' }}>{totalReps}</div>
+            <div className="stat-label">Total reps in org</div>
+          </div>
+        </div>
+
+        {/* Overall course completion rollup */}
+        {(overallCourses.length > 0 || teamCoursesLoading) && (
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <div className="card-header">
+              <h2 className="card-title">Overall core curriculum completion</h2>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{totalReps} reps across entire downstream</span>
+            </div>
+            {teamCoursesLoading ? (
+              <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', fontSize: '0.875rem' }}>
+                <div className="spinner" style={{ width: '16px', height: '16px' }} /> Loading…
+              </div>
+            ) : (
+              <div className="card-body">
+                {overallCourses.map((course) => {
+                  const pct = course.completion_pct ?? 0;
+                  const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+                  return (
+                    <div key={course.hs_item_id} style={{ marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b', flex: 1 }}>{course.name}</span>
+                        {course.competency && (
+                          <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px' }}>{course.competency}</span>
+                        )}
+                        <span style={{ fontWeight: 700, fontSize: '0.875rem', color: barColor }}>{pct}%</span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{course.completed} / {course.member_count}</span>
+                      </div>
+                      <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Direct reports breakdown */}
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-header">
+            <h2 className="card-title">Breakdown by reporting line</h2>
+            <span className="badge badge-slate">{directReports.length} direct reports</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {directReports.length === 0 && (
+              <div className="empty-state"><div className="empty-icon">👥</div><div>No direct reports found.</div></div>
+            )}
+            {directReports.map((report) => {
+              const stats = reportStats[report.id] || { courses: [], memberCount: 0, directReportCount: 0 };
+              return (
+                <div key={report.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                  {/* Report header */}
+                  <div style={{ padding: '14px 18px', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                    <Avatar name={report.full_name || report.email} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e293b' }}>{report.full_name || report.email}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                        <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', marginRight: '8px', fontWeight: 500 }}>
+                          {roleLabelMap[report.role] || report.role}
+                        </span>
+                        {stats.directReportCount > 0 && <span>{stats.directReportCount} direct report{stats.directReportCount !== 1 ? 's' : ''} · </span>}
+                        {stats.memberCount > 0 && <span>{stats.memberCount} rep{stats.memberCount !== 1 ? 's' : ''} in team</span>}
+                      </div>
+                    </div>
+                    <Link to={`/team/${report.id}`} className="btn btn-ghost btn-sm">View team →</Link>
+                  </div>
+
+                  {/* Course completion mini-table */}
+                  {stats.courses.length > 0 ? (
+                    <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {stats.courses.map((course) => {
+                        const pct = course.completion_pct ?? 0;
+                        const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+                        const saPct = course.sa_completion_pct ?? 0;
+                        const saBar = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
+                        return (
+                          <div key={course.hs_item_id}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span style={{ flex: 1, fontSize: '0.8125rem', color: '#334155', fontWeight: 500 }}>{course.name}</span>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
+                              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.completed}/{course.member_count}</span>
+                            </div>
+                            <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '3px' : 0 }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.3s ease' }} />
+                            </div>
+                            {course.sa_count > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ height: '4px', flex: 1, borderRadius: '2px', background: '#ede9fe', overflow: 'hidden' }}>
+                                  <div style={{ width: `${saPct}%`, height: '100%', background: saBar, borderRadius: '2px' }} />
+                                </div>
+                                <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{saPct}% SA</span>
+                                {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ padding: '10px 18px', color: '#94a3b8', fontSize: '0.8rem' }}>No course completion data yet.</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
