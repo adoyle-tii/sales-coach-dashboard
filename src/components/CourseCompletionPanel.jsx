@@ -69,19 +69,21 @@ function ProgressBar({ pct, color }) {
 // Values > 5 are treated as percentages; values ≤ 5 are treated as rubric scores.
 function SAScoreBadge({ score }) {
   if (score == null) return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#f3e8ff', border: '1px solid #c4b5fd', fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '28px', borderRadius: '14px', padding: '0 7px', background: '#f3e8ff', border: '1px solid #c4b5fd', fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed' }}>
       —
     </span>
   );
   const isPct = score > 5;
   const pct = isPct ? score : (score / 5) * 100;
-  const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
-  const bg    = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef3c7' : '#fee2e2';
+  const outOf5 = (Math.round((pct / 100 * 5) * 10) / 10).toFixed(1);
+  const color  = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
+  const bg     = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef3c7' : '#fee2e2';
   const border = pct >= 80 ? '#86efac' : pct >= 60 ? '#fde68a' : '#fca5a5';
-  const label = isPct ? `${Math.round(score)}%` : (Math.round(score * 10) / 10).toFixed(1);
+  const pctLabel = isPct ? `${Math.round(score)}%` : `${(Math.round(score * 10) / 10).toFixed(1)}/5`;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '28px', height: '28px', borderRadius: '14px', padding: '0 5px', background: bg, border: `1px solid ${border}`, fontSize: '0.68rem', fontWeight: 700, color }}>
-      {label}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', height: '28px', borderRadius: '14px', padding: '0 8px', background: bg, border: `1px solid ${border}`, fontSize: '0.68rem', fontWeight: 700, color, whiteSpace: 'nowrap' }}>
+      {pctLabel}
+      {isPct && <span style={{ fontWeight: 500, opacity: 0.85 }}>· {outOf5}/5</span>}
     </span>
   );
 }
@@ -164,10 +166,17 @@ function SkillsAssessmentRow({ lesson }) {
             (() => {
               const { value, outOf, isPct } = displayScore;
               const pct = isPct ? value : (value / outOf) * 100;
+              const outOf5 = (pct / 100 * 5);
+              const outOf5Str = (Math.round(outOf5 * 10) / 10).toFixed(1);
               const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
               return (
-                <span style={{ color }}>
+                <span style={{ color, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                   {isPct ? `${value}%` : `${value.toFixed(1)} / 5`}
+                  {isPct && (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 500, opacity: 0.8 }}>
+                      · {outOf5Str}/5
+                    </span>
+                  )}
                 </span>
               );
             })()
@@ -254,9 +263,9 @@ function CourseCard({ course }) {
             <StatusBadge status={courseStatus} />
           </div>
           {/* Dual progress bars */}
-          <div style={{ marginTop: '10px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div style={{ marginTop: '10px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {course.lesson_count > 0 && (
-              <div style={{ flex: '1 1 200px', minWidth: '160px' }}>
+              <div style={{ flex: '1 1 140px', maxWidth: '280px', minWidth: '120px' }}>
                 <ProgressBar pct={course.lesson_pct ?? 0} />
                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
                   {course.lessons_completed} / {course.lesson_count} lessons complete
@@ -265,7 +274,7 @@ function CourseCard({ course }) {
             )}
             {saCount > 0 && (
               <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ minWidth: '120px' }}>
+                <div style={{ minWidth: '110px' }}>
                   <ProgressBar pct={saPct} color={saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0'} />
                   <div style={{ fontSize: '0.72rem', color: '#7c3aed', marginTop: '2px' }}>
                     {saCompleted} / {saCount} assessments{course.sa_submitted > 0 ? ` · ${course.sa_submitted} pending` : ''}
