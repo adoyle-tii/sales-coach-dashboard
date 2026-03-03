@@ -9,19 +9,22 @@ import { useState } from 'react';
  *   error        — string | null
  */
 
+// Highspot status values vary: "Completed", "complete", "In Progress", "in_progress", etc.
+const isComplete   = (s) => (s || '').toLowerCase().startsWith('complet');
+const isInProgress = (s) => { const v = (s || '').toLowerCase(); return v.includes('progress') || v === 'in_progress'; };
+
 function statusColor(status) {
-  const s = (status || '').toLowerCase();
-  if (s === 'complete') return '#16a34a';
-  if (s === 'in_progress') return '#d97706';
+  if (isComplete(status))   return '#16a34a';
+  if (isInProgress(status)) return '#d97706';
   return '#94a3b8';
 }
 
 function statusLabel(status) {
   const s = (status || '').toLowerCase();
-  if (s === 'complete') return 'Complete';
-  if (s === 'in_progress') return 'In progress';
-  if (s === 'submitted') return 'Submitted';
-  if (s === 'reviewed') return 'Reviewed';
+  if (isComplete(status))   return 'Complete';
+  if (isInProgress(status)) return 'In progress';
+  if (s === 'submitted')    return 'Submitted';
+  if (s === 'reviewed')     return 'Reviewed';
   return 'Not started';
 }
 
@@ -292,8 +295,8 @@ export default function CourseCompletionPanel({ completions, loading, error }) {
   }
 
   const totalCourses = courses.length;
-  const completedCourses = courses.filter((c) => (c.course_completion?.completion_status || '').toLowerCase() === 'complete').length;
-  const inProgressCourses = courses.filter((c) => (c.course_completion?.completion_status || '').toLowerCase() === 'in_progress').length;
+  const completedCourses = courses.filter((c) => isComplete(c.course_completion?.completion_status)).length;
+  const inProgressCourses = courses.filter((c) => isInProgress(c.course_completion?.completion_status)).length;
   const avgLessonPct = courses.filter((c) => c.lesson_count > 0).reduce((s, c) => s + (c.lesson_pct ?? 0), 0) / (courses.filter((c) => c.lesson_count > 0).length || 1);
 
   return (
