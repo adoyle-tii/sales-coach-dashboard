@@ -65,19 +65,23 @@ function ProgressBar({ pct, color }) {
   );
 }
 
+// score is either a rubric avg (1–5 scale) or a percent_correct avg (0–100 scale).
+// Values > 5 are treated as percentages; values ≤ 5 are treated as rubric scores.
 function SAScoreBadge({ score }) {
   if (score == null) return (
     <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#f3e8ff', border: '1px solid #c4b5fd', fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed' }}>
       —
     </span>
   );
-  const rounded = Math.round(score * 10) / 10;
-  const color = rounded >= 4 ? '#16a34a' : rounded >= 3 ? '#d97706' : '#dc2626';
-  const bg = rounded >= 4 ? '#dcfce7' : rounded >= 3 ? '#fef3c7' : '#fee2e2';
-  const border = rounded >= 4 ? '#86efac' : rounded >= 3 ? '#fde68a' : '#fca5a5';
+  const isPct = score > 5;
+  const pct = isPct ? score : (score / 5) * 100;
+  const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
+  const bg    = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef3c7' : '#fee2e2';
+  const border = pct >= 80 ? '#86efac' : pct >= 60 ? '#fde68a' : '#fca5a5';
+  const label = isPct ? `${Math.round(score)}%` : (Math.round(score * 10) / 10).toFixed(1);
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: bg, border: `1px solid ${border}`, fontSize: '0.7rem', fontWeight: 700, color }}>
-      {rounded.toFixed(1)}
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '28px', height: '28px', borderRadius: '14px', padding: '0 5px', background: bg, border: `1px solid ${border}`, fontSize: '0.68rem', fontWeight: 700, color }}>
+      {label}
     </span>
   );
 }
@@ -132,11 +136,11 @@ function SkillsAssessmentRow({ lesson }) {
   const statusClr = saStatusColor(comp);
   const isReviewed = !!(comp?.reviewed_at || isComplete(comp?.completion_status));
   // rubric_score is the primary score (avg of rubric criteria, scale 1–5).
-  // Fall back to percent_correct (0–100) converted to a 1–5 scale if rubric_score absent.
+  // Fall back to percent_correct which Highspot stores as a 0–1 decimal (0.6 = 60%).
   const displayScore = comp?.rubric_score != null
     ? { value: Math.round(comp.rubric_score * 10) / 10, outOf: 5, isPct: false }
     : comp?.percent_correct != null
-      ? { value: Math.round(comp.percent_correct), outOf: 100, isPct: true }
+      ? { value: Math.round(comp.percent_correct * 100), outOf: 100, isPct: true }
       : null;
 
   return (
