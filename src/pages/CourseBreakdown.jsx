@@ -357,19 +357,90 @@ export default function CourseBreakdown() {
         </div>
       </div>
 
-      {/* Breakdown by group */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Breakdown by reporting line</h2>
-          <span className="badge badge-slate">{groups.length} group{groups.length !== 1 ? 's' : ''}</span>
-        </div>
-        {groups.length === 0 && (
-          <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-icon">👥</div><div>No groups found.</div></div></div></div>
-        )}
-        {groups.map((group) => (
-          <GroupCard key={group.id} group={group} />
-        ))}
-      </div>
+      {/* Breakdown by group — or flat rep table if all groups are single reps (manager view) */}
+      {(() => {
+        // When every group IS a single rep (manager's direct reports are all reps),
+        // skip the accordion entirely and render one flat table.
+        const allSingleRep = groups.length > 0 && groups.every((g) => g.role === 'rep' && g.reps.length === 1 && g.reps[0].id === g.id);
+        const flatReps = allSingleRep ? groups.map((g) => g.reps[0]) : null;
+        const hasSa = allSingleRep && flatReps.some((r) => r.sa_total > 0);
+
+        if (allSingleRep) {
+          return (
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Rep breakdown</h2>
+                <span className="badge badge-slate">{flatReps.length} rep{flatReps.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="card" style={{ overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Rep</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Content progress</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Lessons</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Course status</th>
+                        {hasSa && <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>SA submitted</th>}
+                        {hasSa && <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Avg SA score</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {flatReps.map((rep) => (
+                        <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Avatar name={rep.full_name || rep.email} />
+                              <div>
+                                <Link to={`/team/${rep.id}`} className="text-link" style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
+                                  {rep.full_name || rep.email}
+                                </Link>
+                                {rep.sub_role && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginTop: '1px' }}>{rep.sub_role}</div>}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px 12px', minWidth: '140px' }}>
+                            <LessonBar pct={rep.lesson_pct} courseStatus={rep.course_status} />
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
+                            {rep.lessons_complete}/{rep.lessons_total}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <CourseStatusBadge status={rep.course_status} />
+                          </td>
+                          {hasSa && <td style={{ padding: '10px 12px', textAlign: 'center' }}><SaSubmittedCell rep={rep} /></td>}
+                          {hasSa && (
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              {rep.sa_avg_score != null
+                                ? <span style={{ fontSize: '0.8rem', fontWeight: 700, color: rep.sa_avg_score >= 3.0 ? '#16a34a' : '#dc2626' }}>{Math.round((rep.sa_avg_score / 5) * 100)}%</span>
+                                : <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>—</span>}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Breakdown by reporting line</h2>
+              <span className="badge badge-slate">{groups.length} group{groups.length !== 1 ? 's' : ''}</span>
+            </div>
+            {groups.length === 0 && (
+              <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-icon">👥</div><div>No groups found.</div></div></div></div>
+            )}
+            {groups.map((group) => (
+              <GroupCard key={group.id} group={group} />
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
