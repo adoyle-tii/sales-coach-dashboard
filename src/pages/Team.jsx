@@ -155,11 +155,14 @@ export default function Team() {
           setTeamCoursesLoading(true);
           try {
             const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
+            const rawText = await cRes.text();
+            console.log('[Team] overall rollup status:', cRes.status, 'body:', rawText.slice(0, 500));
             if (cRes.ok) {
-              const d = await cRes.json().catch(() => ({}));
+              const d = JSON.parse(rawText);
+              console.log('[Team] overall rollup courses count:', d.courses?.length, 'memberCount:', d.memberCount);
               setTeamCourses(d.courses || []);
             } else {
-              console.warn('[Team] overall rollup failed:', cRes.status, await cRes.text().catch(() => ''));
+              console.warn('[Team] overall rollup failed:', cRes.status, rawText);
             }
           } catch (err) {
             console.warn('[Team] overall rollup error:', err);
