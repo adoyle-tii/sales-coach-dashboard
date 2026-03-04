@@ -464,92 +464,147 @@ export default function Team() {
           </div>
         )}
 
-        {/* Direct reports breakdown */}
-        <div className="card" style={{ marginBottom: '24px' }}>
-          <div className="card-header">
-            <h2 className="card-title">Breakdown by {tierLabel}</h2>
-            <span className="badge badge-slate">{directReports.length} direct report{directReports.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {directReports.length === 0 && (
-              <div className="empty-state"><div className="empty-icon">👥</div><div>No direct reports found.</div></div>
-            )}
-            {directReports.map((report) => {
-              const stats = reportStats[report.id] || { courses: [], memberCount: 0, directReportCount: 0 };
-              const repLabel = stats.memberCount > 0 ? `${stats.memberCount} rep${stats.memberCount !== 1 ? 's' : ''} in downstream` : 'No reps yet';
-              return (
-                <div key={report.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                  {/* Report header */}
-                  <div style={{ padding: '14px 18px', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #e2e8f0' }}>
-                    <Avatar name={report.full_name || report.email} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e293b' }}>{report.full_name || report.email}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>
-                          {roleLabelMap[report.role] || report.role}
-                        </span>
-                        {stats.directReportCount > 0 && (
-                          <span>{stats.directReportCount} direct report{stats.directReportCount !== 1 ? 's' : ''}</span>
-                        )}
-                        {stats.memberCount > 0 && (
-                          <span style={{ color: '#7c3aed', fontWeight: 600 }}>· {repLabel}</span>
-                        )}
-                      </div>
-                    </div>
-                    <Link
-                      to={['leader','senior_leader','executive'].includes(report.role) ? `/team/view/${report.id}` : `/team/${report.id}`}
-                      className="btn btn-ghost btn-sm"
-                    >View team →</Link>
-                  </div>
+        {/* Direct reports breakdown — split reps (flat table) from managers/leaders (cards) */}
+        {(() => {
+          const directRepReports = directReports.filter((r) => r.role === 'rep');
+          const teamReports = directReports.filter((r) => r.role !== 'rep');
+          const fromPath = viewAsId ? `/team/view/${viewAsId}` : '/team';
+          const fromLabel = viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s overview` : 'Org overview';
 
-                  {/* Course completion mini-bars — clickable to drill down */}
-                  {stats.courses.length > 0 ? (
-                    <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {stats.courses.map((course) => {
-                        const pct = course.content_pct ?? course.completion_pct ?? 0;
-                        const passPct = course.pass_pct ?? 0;
-                        const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
-                        const drillUrl = `/team/course/${encodeURIComponent(report.id)}/${encodeURIComponent(course.hs_item_id)}`;
-                        const fromPath = viewAsId ? `/team/view/${viewAsId}` : '/team';
-                        const fromLabel = viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s overview` : 'Org overview';
-                        return (
-                          <Link
-                            key={course.hs_item_id}
-                            to={drillUrl}
-                            state={{ from: fromPath, fromLabel }}
-                            style={{ display: 'block', textDecoration: 'none' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                              <span style={{ flex: 1, fontSize: '0.8125rem', color: '#334155', fontWeight: 500 }}>{course.name}</span>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
-                              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.content_complete ?? course.completed}/{course.member_count}</span>
-                              {(course.passed > 0) && <span style={{ fontSize: '0.68rem', color: '#16a34a', background: '#dcfce7', borderRadius: '4px', padding: '0px 4px' }}>{course.passed} passed</span>}
-                              {(course.pending_review > 0) && <span style={{ fontSize: '0.68rem', color: '#7c3aed', background: '#f5f3ff', borderRadius: '4px', padding: '0px 4px' }}>{course.pending_review} pending</span>}
-                            </div>
-                            <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '3px' : 0 }}>
-                              <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.3s ease' }} />
-                            </div>
-                            {course.sa_count > 0 && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <div style={{ height: '4px', flex: 1, borderRadius: '2px', background: '#ede9fe', overflow: 'hidden' }}>
-                                  <div style={{ width: `${passPct}%`, height: '100%', background: '#16a34a', borderRadius: '2px' }} />
-                                </div>
-                                <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{passPct}% SA</span>
-                                {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
-                              </div>
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ padding: '10px 18px', color: '#94a3b8', fontSize: '0.8rem' }}>No course completion data yet.</div>
-                  )}
+          // Reusable course mini-bar row for team report cards
+          const CourseMiniBar = ({ course, reportId }) => {
+            const pct = course.content_pct ?? course.completion_pct ?? 0;
+            const passPct = course.pass_pct ?? 0;
+            const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+            return (
+              <Link
+                key={course.hs_item_id}
+                to={`/team/course/${encodeURIComponent(reportId)}/${encodeURIComponent(course.hs_item_id)}`}
+                state={{ from: fromPath, fromLabel }}
+                style={{ display: 'block', textDecoration: 'none' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ flex: 1, fontSize: '0.8125rem', color: '#334155', fontWeight: 500 }}>{course.name}</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.content_complete ?? course.completed}/{course.member_count}</span>
+                  {(course.passed > 0) && <span style={{ fontSize: '0.68rem', color: '#16a34a', background: '#dcfce7', borderRadius: '4px', padding: '0px 4px' }}>{course.passed} passed</span>}
+                  {(course.pending_review > 0) && <span style={{ fontSize: '0.68rem', color: '#7c3aed', background: '#f5f3ff', borderRadius: '4px', padding: '0px 4px' }}>{course.pending_review} pending</span>}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '3px' : 0 }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.3s ease' }} />
+                </div>
+                {course.sa_count > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ height: '4px', flex: 1, borderRadius: '2px', background: '#ede9fe', overflow: 'hidden' }}>
+                      <div style={{ width: `${passPct}%`, height: '100%', background: '#16a34a', borderRadius: '2px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{passPct}% SA</span>
+                    {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
+                  </div>
+                )}
+              </Link>
+            );
+          };
+
+          return (
+            <>
+              {directReports.length === 0 && (
+                <div className="card" style={{ marginBottom: '24px' }}>
+                  <div className="card-body">
+                    <div className="empty-state"><div className="empty-icon">👥</div><div>No direct reports found.</div></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Direct rep reports — flat table (no "View team", no course bars) */}
+              {directRepReports.length > 0 && (
+                <div className="card" style={{ marginBottom: '24px' }}>
+                  <div className="card-header">
+                    <h2 className="card-title">Direct rep reports</h2>
+                    <span className="badge badge-slate">{directRepReports.length} rep{directRepReports.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Rep</th>
+                          <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {directRepReports.map((rep) => (
+                          <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Avatar name={rep.full_name || rep.email} />
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b' }}>{rep.full_name || rep.email}</div>
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '3px' }}>
+                                    <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>Rep</span>
+                                    {rep.sub_role && <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>{rep.sub_role}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                              <Link to={`/team/${rep.id}`} className="btn btn-ghost btn-sm">View →</Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Team/manager/leader direct reports — course cards */}
+              {teamReports.length > 0 && (
+                <div className="card" style={{ marginBottom: '24px' }}>
+                  <div className="card-header">
+                    <h2 className="card-title">Breakdown by {tierLabel}</h2>
+                    <span className="badge badge-slate">{teamReports.length} direct report{teamReports.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {teamReports.map((report) => {
+                      const stats = reportStats[report.id] || { courses: [], memberCount: 0, directReportCount: 0 };
+                      const repLabel = stats.memberCount > 0 ? `${stats.memberCount} rep${stats.memberCount !== 1 ? 's' : ''} in downstream` : 'No reps yet';
+                      return (
+                        <div key={report.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                          <div style={{ padding: '14px 18px', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                            <Avatar name={report.full_name || report.email} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e293b' }}>{report.full_name || report.email}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>
+                                  {roleLabelMap[report.role] || report.role}
+                                </span>
+                                {stats.directReportCount > 0 && <span>{stats.directReportCount} direct report{stats.directReportCount !== 1 ? 's' : ''}</span>}
+                                {stats.memberCount > 0 && <span style={{ color: '#7c3aed', fontWeight: 600 }}>· {repLabel}</span>}
+                              </div>
+                            </div>
+                            <Link
+                              to={['leader','senior_leader','executive'].includes(report.role) ? `/team/view/${report.id}` : `/team/${report.id}`}
+                              className="btn btn-ghost btn-sm"
+                            >View team →</Link>
+                          </div>
+                          {stats.courses.length > 0 ? (
+                            <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {stats.courses.map((course) => (
+                                <CourseMiniBar key={course.hs_item_id} course={course} reportId={report.id} />
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ padding: '10px 18px', color: '#94a3b8', fontSize: '0.8rem' }}>No course completion data yet.</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
     );
   }
