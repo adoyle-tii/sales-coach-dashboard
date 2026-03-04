@@ -357,20 +357,19 @@ export default function CourseBreakdown() {
         </div>
       </div>
 
-      {/* Breakdown by group — or flat rep table if all groups are single reps (manager view) */}
+      {/* Breakdown — split into direct rep table + downstream team accordions */}
       {(() => {
-        // When every group IS a single rep (manager's direct reports are all reps),
-        // skip the accordion entirely and render one flat table.
-        const allSingleRep = groups.length > 0 && groups.every((g) => g.role === 'rep' && g.reps.length === 1 && g.reps[0].id === g.id);
-        const flatReps = allSingleRep ? groups.map((g) => g.reps[0]) : null;
-        const hasSa = allSingleRep && flatReps.some((r) => r.sa_total > 0);
+        // Separate direct rep reports (single-rep groups) from manager/leader groups
+        const directRepGroups = groups.filter((g) => g.role === 'rep' && g.reps.length === 1 && g.reps[0].id === g.id);
+        const teamGroups = groups.filter((g) => !(g.role === 'rep' && g.reps.length === 1 && g.reps[0].id === g.id));
 
-        if (allSingleRep) {
+        const FlatRepTable = ({ reps, title, count }) => {
+          const hasSa = reps.some((r) => r.sa_total > 0);
           return (
             <div style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Rep breakdown</h2>
-                <span className="badge badge-slate">{flatReps.length} rep{flatReps.length !== 1 ? 's' : ''}</span>
+                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>{title}</h2>
+                <span className="badge badge-slate">{count} rep{count !== 1 ? 's' : ''}</span>
               </div>
               <div className="card" style={{ overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
@@ -386,28 +385,20 @@ export default function CourseBreakdown() {
                       </tr>
                     </thead>
                     <tbody>
-                      {flatReps.map((rep) => (
+                      {reps.map((rep) => (
                         <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '10px 16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <Avatar name={rep.full_name || rep.email} />
                               <div>
-                                <Link to={`/team/${rep.id}`} className="text-link" style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
-                                  {rep.full_name || rep.email}
-                                </Link>
+                                <Link to={`/team/${rep.id}`} className="text-link" style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{rep.full_name || rep.email}</Link>
                                 {rep.sub_role && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginTop: '1px' }}>{rep.sub_role}</div>}
                               </div>
                             </div>
                           </td>
-                          <td style={{ padding: '10px 12px', minWidth: '140px' }}>
-                            <LessonBar pct={rep.lesson_pct} courseStatus={rep.course_status} />
-                          </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                            {rep.lessons_complete}/{rep.lessons_total}
-                          </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <CourseStatusBadge status={rep.course_status} />
-                          </td>
+                          <td style={{ padding: '10px 12px', minWidth: '140px' }}><LessonBar pct={rep.lesson_pct} courseStatus={rep.course_status} /></td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>{rep.lessons_complete}/{rep.lessons_total}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}><CourseStatusBadge status={rep.course_status} /></td>
                           {hasSa && <td style={{ padding: '10px 12px', textAlign: 'center' }}><SaSubmittedCell rep={rep} /></td>}
                           {hasSa && (
                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -424,21 +415,39 @@ export default function CourseBreakdown() {
               </div>
             </div>
           );
-        }
+        };
+
+        const directReps = directRepGroups.map((g) => g.reps[0]);
 
         return (
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Breakdown by reporting line</h2>
-              <span className="badge badge-slate">{groups.length} group{groups.length !== 1 ? 's' : ''}</span>
-            </div>
-            {groups.length === 0 && (
-              <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-icon">👥</div><div>No groups found.</div></div></div></div>
+          <>
+            {/* Direct rep reports — flat table */}
+            {directReps.length > 0 && (
+              <FlatRepTable
+                reps={directReps}
+                title={teamGroups.length > 0 ? 'Direct rep reports' : 'Rep breakdown'}
+                count={directReps.length}
+              />
             )}
-            {groups.map((group) => (
-              <GroupCard key={group.id} group={group} />
-            ))}
-          </div>
+
+            {/* Downstream teams — accordion */}
+            {teamGroups.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>Downstream teams</h2>
+                  <span className="badge badge-slate">{teamGroups.length} team{teamGroups.length !== 1 ? 's' : ''}</span>
+                </div>
+                {teamGroups.map((group) => (
+                  <GroupCard key={group.id} group={group} />
+                ))}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {groups.length === 0 && (
+              <div className="card"><div className="card-body"><div className="empty-state"><div className="empty-icon">👥</div><div>No data found.</div></div></div></div>
+            )}
+          </>
         );
       })()}
     </div>
