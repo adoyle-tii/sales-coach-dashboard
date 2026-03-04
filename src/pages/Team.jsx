@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar, scoreColor } from '../components/SpiderChart';
 
@@ -61,7 +61,20 @@ const HIERARCHY_ROLES = ['leader', 'senior_leader', 'executive'];
 
 export default function Team() {
   const { dataUserId, viewProfile } = useImpersonation();
-  const myRole = viewProfile?.role || 'rep';
+  const { viewAsId } = useParams();
+
+  // When viewing a downstream manager's team (via /team/view/:viewAsId),
+  // use their ID and fetch their profile for role-based rendering
+  const [viewAsProfile, setViewAsProfile] = useState(null);
+  useEffect(() => {
+    if (!viewAsId || !supabase) return;
+    supabase.from('users').select('id, role, full_name, email, sub_role, team_id').eq('id', viewAsId).single()
+      .then(({ data }) => setViewAsProfile(data ?? null));
+  }, [viewAsId]);
+
+  const effectiveUserId = viewAsId || dataUserId;
+  const effectiveProfile = viewAsId ? viewAsProfile : viewProfile;
+  const myRole = effectiveProfile?.role || 'rep';
   const isHierarchy = HIERARCHY_ROLES.includes(myRole);
 
   // Hierarchy view state (for leaders/senior_leaders/executives)
@@ -91,47 +104,49 @@ export default function Team() {
   useEffect(() => {
     (async () => {
       try {
-        if (!dataUserId || !supabase) { setLoading(false); return; }
+        if (!effectiveUserId || !supabase) { setLoading(false); return; }
 
         const { data: { session: authSession } } = await supabase.auth.getSession();
         const token = authSession?.access_token;
         const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
 
         if (isHierarchy) {
-          // ── Hierarchy view: load direct reports (managers/leaders/RVPs) ──
+          // ── Hierarchy view: load direct reports ──
           const { data: reports } = await supabase
             .from('users')
             .select('id, full_name, email, role, sub_role, team_id')
-            .eq('reports_to', dataUserId);
+            .eq('reports_to', effectiveUserId);
           const reportList = (reports ?? []).filter((u) => !['superadmin','admin'].includes(u.role));
           setDirectReports(reportList);
 
-          // For each direct report, fetch their downstream stats via the worker
+          // For each direct report, fetch their full downstream stats via the worker
+          // (worker BFS already computes memberCount = total downstream reps)
           const statsMap = {};
           await Promise.all(reportList.map(async (report) => {
             try {
               const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(report.id)}`, { headers: authHeaders });
               const cData = cRes.ok ? await cRes.json().catch(() => ({})) : {};
 
-              // Also fetch downstream rep count
-              const { count } = await supabase
+              // Count their immediate direct reports (for display context)
+              const { count: directCount } = await supabase
                 .from('users')
                 .select('id', { count: 'exact', head: true })
-                .eq('reports_to', report.id);
+                .eq('reports_to', report.id)
+                .not('role', 'in', '("superadmin","admin")');
 
               statsMap[report.id] = {
                 courses: cData.courses || [],
-                memberCount: cData.memberCount || 0,
-                directReportCount: count || 0,
+                memberCount: cData.memberCount || 0,   // total downstream reps (from BFS)
+                directReportCount: directCount || 0,   // immediate direct reports
               };
             } catch { statsMap[report.id] = { courses: [], memberCount: 0, directReportCount: 0 }; }
           }));
           setReportStats(statsMap);
 
-          // Also load overall course rollup for self
+          // Also load overall course rollup for self (full downstream)
           setTeamCoursesLoading(true);
           try {
-            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
+            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
             if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
           } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
 
@@ -140,7 +155,7 @@ export default function Team() {
           const { data: users } = await supabase
             .from('users')
             .select('id, full_name, email, role, sub_role')
-            .eq('reports_to', dataUserId)
+            .eq('reports_to', effectiveUserId)
             .not('role', 'in', '("superadmin","admin")');
           const list = users ?? [];
           setMembers(list);
@@ -182,7 +197,7 @@ export default function Team() {
           // Course completion rollup
           setTeamCoursesLoading(true);
           try {
-            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(dataUserId)}`, { headers: authHeaders });
+            const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
             if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
           } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
         }
@@ -193,9 +208,12 @@ export default function Team() {
         setLoading(false);
       }
     })();
-  }, [dataUserId, isHierarchy]);
+  }, [effectiveUserId, isHierarchy]);
 
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading team…</div>;
+
+  // When viewAsId is set but profile hasn't loaded yet, show loading
+  if (viewAsId && !viewAsProfile) return <div className="loading-screen"><div className="spinner" /> Loading team…</div>;
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -314,15 +332,25 @@ export default function Team() {
 
   // ── Hierarchy view for leaders / senior leaders / executives ──────────────
   if (isHierarchy) {
-    const totalReps = Object.values(reportStats).reduce((s, r) => s + r.memberCount, 0);
+    // totalReps comes from worker BFS memberCount per direct report — this is their full downstream
+    const totalReps = teamCourses.length > 0
+      ? (teamCourses[0]?.member_count ?? Object.values(reportStats).reduce((s, r) => s + r.memberCount, 0))
+      : Object.values(reportStats).reduce((s, r) => s + r.memberCount, 0);
     const overallCourses = teamCourses;
+
+    const tierLabel = myRole === 'executive' ? 'Senior Leaders' : myRole === 'senior_leader' ? 'Leaders / Managers' : 'Managers';
 
     return (
       <div>
         <div className="page-header">
-          <h1 className="page-title">Org overview</h1>
+          <h1 className="page-title">
+            {viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s Org` : 'Org overview'}
+          </h1>
           <p className="page-subtitle">
-            Full downstream breakdown for your reporting line.
+            {viewAsId
+              ? <><Link to="/team" className="text-link">← Back to your overview</Link> &nbsp;·&nbsp; Full downstream breakdown for {effectiveProfile?.full_name || 'this manager'}.</>
+              : 'Full downstream breakdown for your reporting line.'
+            }
           </p>
         </div>
 
@@ -334,7 +362,7 @@ export default function Team() {
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#7c3aed' }}>{totalReps}</div>
-            <div className="stat-label">Total reps in org</div>
+            <div className="stat-label">Total reps in downstream</div>
           </div>
         </div>
 
@@ -354,6 +382,8 @@ export default function Team() {
                 {overallCourses.map((course) => {
                   const pct = course.completion_pct ?? 0;
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
+                  const saPct = course.sa_completion_pct ?? 0;
+                  const saBarColor = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
                   return (
                     <div key={course.hs_item_id} style={{ marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
@@ -363,10 +393,24 @@ export default function Team() {
                         )}
                         <span style={{ fontWeight: 700, fontSize: '0.875rem', color: barColor }}>{pct}%</span>
                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{course.completed} / {course.member_count}</span>
+                        {course.started > course.completed && (
+                          <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px' }}>
+                            {course.started - course.completed} in progress
+                          </span>
+                        )}
                       </div>
-                      <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden' }}>
+                      <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '4px' : 0 }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
                       </div>
+                      {course.sa_count > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: '#ede9fe', overflow: 'hidden' }}>
+                            <div style={{ width: `${saPct}%`, height: '100%', background: saBarColor, borderRadius: '3px' }} />
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{saPct}% SA</span>
+                          {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -378,8 +422,8 @@ export default function Team() {
         {/* Direct reports breakdown */}
         <div className="card" style={{ marginBottom: '24px' }}>
           <div className="card-header">
-            <h2 className="card-title">Breakdown by reporting line</h2>
-            <span className="badge badge-slate">{directReports.length} direct reports</span>
+            <h2 className="card-title">Breakdown by {tierLabel}</h2>
+            <span className="badge badge-slate">{directReports.length} direct report{directReports.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {directReports.length === 0 && (
@@ -387,6 +431,7 @@ export default function Team() {
             )}
             {directReports.map((report) => {
               const stats = reportStats[report.id] || { courses: [], memberCount: 0, directReportCount: 0 };
+              const repLabel = stats.memberCount > 0 ? `${stats.memberCount} rep${stats.memberCount !== 1 ? 's' : ''} in downstream` : 'No reps yet';
               return (
                 <div key={report.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
                   {/* Report header */}
@@ -394,18 +439,25 @@ export default function Team() {
                     <Avatar name={report.full_name || report.email} />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e293b' }}>{report.full_name || report.email}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
-                        <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', marginRight: '8px', fontWeight: 500 }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px', fontWeight: 500 }}>
                           {roleLabelMap[report.role] || report.role}
                         </span>
-                        {stats.directReportCount > 0 && <span>{stats.directReportCount} direct report{stats.directReportCount !== 1 ? 's' : ''} · </span>}
-                        {stats.memberCount > 0 && <span>{stats.memberCount} rep{stats.memberCount !== 1 ? 's' : ''} in team</span>}
+                        {stats.directReportCount > 0 && (
+                          <span>{stats.directReportCount} direct report{stats.directReportCount !== 1 ? 's' : ''}</span>
+                        )}
+                        {stats.memberCount > 0 && (
+                          <span style={{ color: '#7c3aed', fontWeight: 600 }}>· {repLabel}</span>
+                        )}
                       </div>
                     </div>
-                    <Link to={`/team/${report.id}`} className="btn btn-ghost btn-sm">View team →</Link>
+                    <Link
+                      to={['leader','senior_leader','executive'].includes(report.role) ? `/team/view/${report.id}` : `/team/${report.id}`}
+                      className="btn btn-ghost btn-sm"
+                    >View team →</Link>
                   </div>
 
-                  {/* Course completion mini-table */}
+                  {/* Course completion mini-bars */}
                   {stats.courses.length > 0 ? (
                     <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {stats.courses.map((course) => {

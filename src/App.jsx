@@ -112,6 +112,7 @@ export default function App() {
         <Route path="my/assessment/:id" element={<AssessmentDetail />} />
         <Route path="my/session/:id" element={<CoachingSessionDetail />} />
         <Route path="team" element={<Team />} />
+          <Route path="team/view/:viewAsId" element={<Team />} />
           <Route path="team/:userId" element={<TeamMember />} />
           <Route path="team/:userId/assessment/:id" element={<AssessmentDetail />} />
           <Route path="team/:userId/session/:id" element={<CoachingSessionDetail />} />
