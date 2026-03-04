@@ -82,7 +82,7 @@ function GroupCard({ group, defaultOpen = false }) {
             {group.sa_pending_review > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#7c3aed', background: '#f5f3ff', borderRadius: '99px', padding: '1px 7px' }}>{group.sa_pending_review} pending review</span>}
             {group.sa_avg_score != null && (
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: group.sa_avg_score >= 3.0 ? '#16a34a' : '#dc2626', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '99px', padding: '1px 7px' }}>
-                SA avg {group.sa_avg_score.toFixed(1)}/5
+                SA avg {Math.round((group.sa_avg_score / 5) * 100)}%
               </span>
             )}
           </div>
@@ -123,7 +123,10 @@ function GroupCard({ group, defaultOpen = false }) {
                   <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>SA status</th>
                 )}
                 {group.reps.some((r) => r.sa_total > 0) && (
-                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>SA score</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>SA complete</th>
+                )}
+                {group.reps.some((r) => r.sa_total > 0) && (
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Avg SA score</th>
                 )}
               </tr>
             </thead>
@@ -158,14 +161,17 @@ function GroupCard({ group, defaultOpen = false }) {
                     </td>
                   )}
                   {group.reps.some((r) => r.sa_total > 0) && (
+                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
+                      {rep.sa_total > 0 ? `${rep.sa_reviewed}/${rep.sa_total}` : <span style={{ color: '#e2e8f0' }}>—</span>}
+                    </td>
+                  )}
+                  {group.reps.some((r) => r.sa_total > 0) && (
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       {rep.sa_avg_score != null ? (
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: rep.sa_avg_score >= 3.0 ? '#16a34a' : '#dc2626' }}>
-                          {rep.sa_avg_score.toFixed(1)}/5
+                          {Math.round((rep.sa_avg_score / 5) * 100)}%
                         </span>
-                      ) : rep.sa_total > 0 ? (
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{rep.sa_reviewed}/{rep.sa_total}</span>
-                      ) : <span style={{ color: '#e2e8f0' }}>—</span>}
+                      ) : <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>—</span>}
                     </td>
                   )}
                 </tr>
