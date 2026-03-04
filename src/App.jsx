@@ -6,9 +6,13 @@ import Login from './pages/Login';
 import My from './pages/My';
 import Team from './pages/Team';
 import TeamMember from './pages/TeamMember';
+import CourseBreakdown from './pages/CourseBreakdown';
 import Admin from './pages/Admin';
 import AssessmentDetail from './pages/AssessmentDetail';
 import CoachingSessionDetail from './pages/CoachingSessionDetail';
+import CourseBreakdown from './pages/CourseBreakdown';
+import CourseBreakdown from './pages/CourseBreakdown';
+import CourseBreakdown from './pages/CourseBreakdown';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -113,6 +117,7 @@ export default function App() {
         <Route path="my/session/:id" element={<CoachingSessionDetail />} />
         <Route path="team" element={<Team />} />
           <Route path="team/view/:viewAsId" element={<Team />} />
+          <Route path="team/course/:managerId/:courseId" element={<CourseBreakdown />} />
           <Route path="team/:userId" element={<TeamMember />} />
           <Route path="team/:userId/assessment/:id" element={<AssessmentDetail />} />
           <Route path="team/:userId/session/:id" element={<CoachingSessionDetail />} />

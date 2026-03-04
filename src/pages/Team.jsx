@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar, scoreColor } from '../components/SpiderChart';
 
@@ -62,6 +62,7 @@ const HIERARCHY_ROLES = ['leader', 'senior_leader', 'executive'];
 export default function Team() {
   const { dataUserId, viewProfile } = useImpersonation();
   const { viewAsId } = useParams();
+  const navigate = useNavigate();
 
   // When viewing a downstream manager's team (via /team/view/:viewAsId),
   // use their ID and fetch their profile for role-based rendering
@@ -384,8 +385,18 @@ export default function Team() {
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
                   const saPct = course.sa_completion_pct ?? 0;
                   const saBarColor = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
+                  const courseUrl = `/team/course/${encodeURIComponent(effectiveUserId)}/${encodeURIComponent(course.hs_item_id)}`;
+                  const fromLabel = viewAsId
+                    ? `${effectiveProfile?.full_name || 'Team'}'s overview`
+                    : 'Org overview';
                   return (
-                    <div key={course.hs_item_id} style={{ marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
+                    <Link
+                      key={course.hs_item_id}
+                      to={courseUrl}
+                      state={{ from: viewAsId ? `/team/view/${viewAsId}` : '/team', fromLabel }}
+                      style={{ display: 'block', marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9', textDecoration: 'none', borderRadius: '4px' }}
+                      className="course-row-link"
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b', flex: 1 }}>{course.name}</span>
                         {course.competency && (
@@ -411,7 +422,7 @@ export default function Team() {
                           {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
                         </div>
                       )}
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -457,7 +468,7 @@ export default function Team() {
                     >View team →</Link>
                   </div>
 
-                  {/* Course completion mini-bars */}
+                  {/* Course completion mini-bars — clickable to drill down */}
                   {stats.courses.length > 0 ? (
                     <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {stats.courses.map((course) => {
@@ -465,8 +476,16 @@ export default function Team() {
                         const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
                         const saPct = course.sa_completion_pct ?? 0;
                         const saBar = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
+                        const drillUrl = `/team/course/${encodeURIComponent(report.id)}/${encodeURIComponent(course.hs_item_id)}`;
+                        const fromPath = viewAsId ? `/team/view/${viewAsId}` : '/team';
+                        const fromLabel = viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s overview` : 'Org overview';
                         return (
-                          <div key={course.hs_item_id}>
+                          <Link
+                            key={course.hs_item_id}
+                            to={drillUrl}
+                            state={{ from: fromPath, fromLabel }}
+                            style={{ display: 'block', textDecoration: 'none' }}
+                          >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                               <span style={{ flex: 1, fontSize: '0.8125rem', color: '#334155', fontWeight: 500 }}>{course.name}</span>
                               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
@@ -484,7 +503,7 @@ export default function Team() {
                                 {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
                               </div>
                             )}
-                          </div>
+                          </Link>
                         );
                       })}
                     </div>

@@ -549,6 +549,10 @@ a.text-link {
 
 a.text-link:hover { text-decoration: underline; }
 
+/* Course row drill-down links */
+a.course-row-link { color: inherit; }
+a.course-row-link:hover { background: #f8fafc; border-radius: 6px; }
+
 /* ── Loading spinner ───────────────────────────────── */
 .loading-screen {
   display: flex;
