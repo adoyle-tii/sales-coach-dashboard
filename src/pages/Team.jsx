@@ -398,6 +398,11 @@ export default function Team() {
         </div>
 
         {/* Overall course completion rollup */}
+        {teamCoursesError && (
+          <div className="alert alert-error" style={{ marginBottom: '16px', fontSize: '0.8rem' }}>
+            Course summary unavailable: {teamCoursesError}
+          </div>
+        )}
         {(overallCourses.length > 0 || teamCoursesLoading) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-header">
