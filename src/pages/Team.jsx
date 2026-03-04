@@ -381,7 +381,8 @@ export default function Team() {
             ) : (
               <div className="card-body">
                 {overallCourses.map((course) => {
-                  const pct = course.completion_pct ?? 0;
+                  const pct = course.content_pct ?? course.completion_pct ?? 0;
+                  const passPct = course.pass_pct ?? 0;
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
                   const saPct = course.sa_completion_pct ?? 0;
                   const saBarColor = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
@@ -403,22 +404,20 @@ export default function Team() {
                           <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1px 6px' }}>{course.competency}</span>
                         )}
                         <span style={{ fontWeight: 700, fontSize: '0.875rem', color: barColor }}>{pct}%</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{course.completed} / {course.member_count}</span>
-                        {course.started > course.completed && (
-                          <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px' }}>
-                            {course.started - course.completed} in progress
-                          </span>
-                        )}
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{course.content_complete ?? course.completed} / {course.member_count}</span>
+                        {(course.passed > 0) && <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '1px 5px' }}>{course.passed} passed</span>}
+                        {(course.pending_review > 0) && <span style={{ fontSize: '0.72rem', color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px', padding: '1px 5px' }}>{course.pending_review} pending review</span>}
+                        {(course.in_progress > 0) && <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px' }}>{course.in_progress} in progress</span>}
                       </div>
-                      <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '4px' : 0 }}>
+                      <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden', marginBottom: '4px' }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
                       </div>
                       {course.sa_count > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                           <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: '#ede9fe', overflow: 'hidden' }}>
-                            <div style={{ width: `${saPct}%`, height: '100%', background: saBarColor, borderRadius: '3px' }} />
+                            <div style={{ width: `${passPct}%`, height: '100%', background: '#16a34a', borderRadius: '3px' }} />
                           </div>
-                          <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{saPct}% SA</span>
+                          <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{passPct}% SA</span>
                           {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
                         </div>
                       )}
@@ -472,10 +471,9 @@ export default function Team() {
                   {stats.courses.length > 0 ? (
                     <div style={{ padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {stats.courses.map((course) => {
-                        const pct = course.completion_pct ?? 0;
+                        const pct = course.content_pct ?? course.completion_pct ?? 0;
+                        const passPct = course.pass_pct ?? 0;
                         const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
-                        const saPct = course.sa_completion_pct ?? 0;
-                        const saBar = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
                         const drillUrl = `/team/course/${encodeURIComponent(report.id)}/${encodeURIComponent(course.hs_item_id)}`;
                         const fromPath = viewAsId ? `/team/view/${viewAsId}` : '/team';
                         const fromLabel = viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s overview` : 'Org overview';
@@ -489,7 +487,9 @@ export default function Team() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                               <span style={{ flex: 1, fontSize: '0.8125rem', color: '#334155', fontWeight: 500 }}>{course.name}</span>
                               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
-                              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.completed}/{course.member_count}</span>
+                              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.content_complete ?? course.completed}/{course.member_count}</span>
+                              {(course.passed > 0) && <span style={{ fontSize: '0.68rem', color: '#16a34a', background: '#dcfce7', borderRadius: '4px', padding: '0px 4px' }}>{course.passed} passed</span>}
+                              {(course.pending_review > 0) && <span style={{ fontSize: '0.68rem', color: '#7c3aed', background: '#f5f3ff', borderRadius: '4px', padding: '0px 4px' }}>{course.pending_review} pending</span>}
                             </div>
                             <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '3px' : 0 }}>
                               <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.3s ease' }} />
@@ -497,9 +497,9 @@ export default function Team() {
                             {course.sa_count > 0 && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <div style={{ height: '4px', flex: 1, borderRadius: '2px', background: '#ede9fe', overflow: 'hidden' }}>
-                                  <div style={{ width: `${saPct}%`, height: '100%', background: saBar, borderRadius: '2px' }} />
+                                  <div style={{ width: `${passPct}%`, height: '100%', background: '#16a34a', borderRadius: '2px' }} />
                                 </div>
-                                <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{saPct}% SA</span>
+                                <span style={{ fontSize: '0.7rem', color: '#7c3aed' }}>{passPct}% SA</span>
                                 {course.sa_avg_score != null && <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>avg {course.sa_avg_score.toFixed(1)}/5</span>}
                               </div>
                             )}
@@ -766,10 +766,9 @@ export default function Team() {
             <div className="card-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {teamCourses.map((course) => {
-                  const pct = course.completion_pct ?? 0;
+                  const pct = course.content_pct ?? course.completion_pct ?? 0;
+                  const passPct = course.pass_pct ?? 0;
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
-                  const saPct = course.sa_completion_pct ?? 0;
-                  const saBarColor = saPct === 100 ? '#16a34a' : saPct > 0 ? '#7c3aed' : '#e2e8f0';
                   const saAvg = course.sa_avg_score;
                   const saAvgColor = saAvg == null ? '#7c3aed' : saAvg >= 4 ? '#16a34a' : saAvg >= 3 ? '#d97706' : '#dc2626';
                   return (
@@ -783,28 +782,26 @@ export default function Team() {
                           </span>
                         )}
                       </div>
-                      {/* Lesson completion bar */}
+                      {/* Content completion bar */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                         <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden' }}>
                           <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '4px', transition: 'width 0.4s ease' }} />
                         </div>
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor, minWidth: '36px', textAlign: 'right' }}>{pct}%</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{course.completed} / {course.member_count} complete</span>
-                        {course.started > course.completed && (
-                          <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>
-                            {course.started - course.completed} in progress
-                          </span>
-                        )}
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{course.content_complete ?? course.completed} / {course.member_count} complete</span>
+                        {(course.passed > 0) && <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.passed} passed</span>}
+                        {(course.pending_review > 0) && <span style={{ fontSize: '0.72rem', color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.pending_review} pending review</span>}
+                        {(course.in_progress > 0) && <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.in_progress} in progress</span>}
                       </div>
-                      {/* Skills Assessment rollup row */}
+                      {/* SA pass rate row */}
                       {course.sa_count > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
                           <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#ede9fe', overflow: 'hidden' }}>
-                            <div style={{ width: `${saPct}%`, height: '100%', background: saBarColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                            <div style={{ width: `${passPct}%`, height: '100%', background: '#16a34a', borderRadius: '3px', transition: 'width 0.4s ease' }} />
                           </div>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: saBarColor, minWidth: '36px', textAlign: 'right' }}>{saPct}%</span>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16a34a', minWidth: '36px', textAlign: 'right' }}>{passPct}%</span>
                           <span style={{ fontSize: '0.72rem', color: '#7c3aed', whiteSpace: 'nowrap' }}>
-                            {course.sa_members_complete} / {course.member_count} have completed assessments
+                            {course.passed} / {course.member_count} SA passed
                           </span>
                           {saAvg != null && (
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: saAvgColor, whiteSpace: 'nowrap', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '10px', padding: '1px 7px' }}>
