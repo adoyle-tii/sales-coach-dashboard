@@ -489,50 +489,139 @@ export default function Admin() {
     reader.readAsText(file);
   }
 
+  function parseCsvBrowser(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, '').trim());
+    const results = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      // Simple CSV parse — handles quoted fields
+      const values = [];
+      let cur = '', inQ = false;
+      for (let c = 0; c < line.length; c++) {
+        const ch = line[c];
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { values.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      values.push(cur.trim());
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = values[idx]?.replace(/^"|"$/g, '') || ''; });
+      results.push(row);
+    }
+    return results;
+  }
+
+  async function insertDirectToSupabase(tableName, rows, chunkSize = 500) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Not authenticated');
+    let inserted = 0;
+    const errors = [];
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      const res = await fetch(`${supabaseUrl}/rest/v1/${tableName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(chunk),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => res.status);
+        errors.push(`chunk ${i}: ${txt}`);
+      } else {
+        inserted += chunk.length;
+      }
+    }
+    return { inserted, errors };
+  }
+
+  async function truncateAndInsert(tableName, rows, label, onProgress) {
+    // Truncate via worker (needs service key), then insert direct from browser
+    const authH = await getAuthHeaders();
+    const truncRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=truncate&raw_table=${tableName}`, {
+      method: 'POST', headers: { ...authH, 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    });
+    if (!truncRes.ok) {
+      const j = await truncRes.json().catch(() => ({}));
+      throw new Error(`Truncate failed for ${label}: ${j.error || truncRes.status}`);
+    }
+    onProgress(`Uploading ${label} (${rows.length.toLocaleString()} rows)…`);
+    const { inserted, errors } = await insertDirectToSupabase(tableName, rows);
+    if (errors.length) console.warn(`${label} insert warnings:`, errors);
+    return inserted;
+  }
+
   async function triggerIngest() {
     setIngestLoading(true); setIngestError(null); setIngestSuccess(null);
     try {
       const authH = await getAuthHeaders();
+      const counts = {};
 
-      // Each CSV is uploaded to its raw staging table as a separate request.
-      // No filtering or joining here — that all happens server-side in hs_finalize_ingest().
-      const steps = [
-        { table: 'items',              csv: csvFiles.items },
-        { table: 'course_lessons',     csv: csvFiles.course_lessons },
-        { table: 'course_members',     csv: csvFiles.course_members },
-        { table: 'lesson_completions', csv: csvFiles.user_course_lesson_completions },
-        { table: 'rubric_ratings',     csv: csvFiles.rubric_ratings },
-        { table: 'users',              csv: csvFiles.users },
-      ];
+      const setProgress = (msg) => setIngestSuccess(msg);
 
-      for (const step of steps) {
-        if (!step.csv) continue;
-
-        const form = new FormData();
-        form.append('csv', new Blob([step.csv], { type: 'text/plain' }), 'data.csv');
-
-        const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=${step.table}`, {
-          method: 'POST',
-          headers: { ...authH },
-          body: form,
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setIngestError(`Upload failed on ${step.table}: ${json.error || res.status}`);
-          setIngestLoading(false);
-          return;
-        }
-        if (json.errors?.length) console.warn(`${step.table} upload warnings:`, json.errors);
+      // ── items ──────────────────────────────────────────────
+      if (csvFiles.items) {
+        const rows = parseCsvBrowser(csvFiles.items)
+          .map((r) => ({ id: r.id || null, name: r.name || null, item_type: r.item_type || r.type || null, created_at: r.created_at || null }))
+          .filter((r) => r.id);
+        counts.items = await truncateAndInsert('hs_raw_items', rows, 'items.csv', setProgress);
       }
 
-      // Finalize: call hs_finalize_ingest() SQL function which does all joins/filtering
+      // ── course_lessons ─────────────────────────────────────
+      if (csvFiles.course_lessons) {
+        const rows = parseCsvBrowser(csvFiles.course_lessons)
+          .map((r) => ({ id: r.id || null, course_id: r.course_id || null, name: r.name || null, lesson_type: r.lesson_type || r.type || null, position: r.position ? parseInt(r.position) : null }))
+          .filter((r) => r.id && r.course_id);
+        counts.course_lessons = await truncateAndInsert('hs_raw_course_lessons', rows, 'course_lessons.csv', setProgress);
+      }
+
+      // ── course_members ─────────────────────────────────────
+      if (csvFiles.course_members) {
+        const rows = parseCsvBrowser(csvFiles.course_members)
+          .map((r) => ({ user_id: r.user_id || null, course_id: r.course_id || null, completion_status: r.completion_status || null, course_status: r.course_status || null }))
+          .filter((r) => r.user_id && r.course_id);
+        counts.course_members = await truncateAndInsert('hs_raw_course_members', rows, 'course_members.csv', setProgress);
+      }
+
+      // ── lesson_completions ─────────────────────────────────
+      if (csvFiles.user_course_lesson_completions) {
+        const rows = parseCsvBrowser(csvFiles.user_course_lesson_completions)
+          .map((r) => ({ user_id: r.user_id || null, lesson_id: r.lesson_id || null, course_id: r.course_id || null, percent_complete: r.percent_complete || null, percent_correct: r.percent_correct || null, submitted_at: r.submitted_at || null, reviewed_at: r.reviewed_at || null, reviewed_by: r.reviewed_by || null, completion_status: r.completion_status || null }))
+          .filter((r) => r.user_id && r.lesson_id);
+        counts.lesson_completions = await truncateAndInsert('hs_raw_lesson_completions', rows, 'lesson_completions.csv', setProgress);
+      }
+
+      // ── rubric_ratings ─────────────────────────────────────
+      if (csvFiles.rubric_ratings) {
+        const rows = parseCsvBrowser(csvFiles.rubric_ratings)
+          .map((r) => ({ user_id: r.user_id || null, lesson_id: r.lesson_id || null, course_id: r.course_id || null, criterion_title: r.criterion_title || null, criterion_rating: r.criterion_rating || null, criterion_feedback: r.criterion_feedback || null, reviewed_at: r.reviewed_at || null }))
+          .filter((r) => r.user_id && r.lesson_id);
+        counts.rubric_ratings = await truncateAndInsert('hs_raw_rubric_ratings', rows, 'rubric_ratings.csv', setProgress);
+      }
+
+      // ── users (for HS user ID matching) ───────────────────
+      if (csvFiles.users) {
+        const rows = parseCsvBrowser(csvFiles.users)
+          .map((r) => ({ id: r.id || null, email: r.email || null }))
+          .filter((r) => r.id && r.email);
+        counts.users = await truncateAndInsert('hs_raw_users', rows, 'users.csv (ID matching)', setProgress);
+      }
+
+      // ── finalize via worker RPC ────────────────────────────
+      setProgress('Finalising data…');
       const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
         body: JSON.stringify({}),
       });
       const finalJson = await finalRes.json().catch(() => ({}));
-
       if (!finalRes.ok) {
         setIngestError(`Finalize failed: ${finalJson.error || finalRes.status}`);
         setIngestLoading(false);
@@ -542,9 +631,10 @@ export default function Admin() {
       const s = finalJson.stats || {};
       const skipped = s.skipped_users ? ` (${s.skipped_users} Highspot users not matched to system accounts)` : '';
       setIngestSuccess(
-        `Ingest complete — ${s.courses ?? 0} courses, ${s.lessons ?? 0} lessons, ` +
-        `${s.course_completions ?? 0} course completions, ${s.lesson_completions ?? 0} lesson completions, ` +
-        `${s.rubric_ratings ?? 0} rubric ratings.${skipped}`
+        `Ingest complete — ${s.courses ?? counts.items ?? 0} courses, ${s.lessons ?? counts.course_lessons ?? 0} lessons, ` +
+        `${s.course_completions ?? counts.course_members ?? 0} course completions, ${s.lesson_completions ?? counts.lesson_completions ?? 0} lesson completions` +
+        (counts.rubric_ratings ? `, ${counts.rubric_ratings} rubric ratings` : '') +
+        `.${skipped}`
       );
       loadIngestStatus();
     } catch (e) {
