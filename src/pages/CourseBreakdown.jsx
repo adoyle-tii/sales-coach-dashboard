@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
@@ -39,6 +39,64 @@ function LessonBar({ pct, courseStatus }) {
         <div style={{ width: `${pct}%`, height: '100%', background: cfg.color, borderRadius: '3px', transition: 'width 0.3s ease' }} />
       </div>
       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: cfg.color, minWidth: '34px', textAlign: 'right' }}>{pct}%</span>
+    </div>
+  );
+}
+
+function SaSubmittedCell({ rep }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
+  if (rep.sa_total === 0) return <span style={{ color: '#e2e8f0' }}>—</span>;
+
+  const hasBreakdown = (rep.sa_awaiting_review ?? 0) + (rep.sa_passed ?? 0) + (rep.sa_failed ?? 0) > 0;
+
+  return (
+    <div
+      ref={ref}
+      style={{ position: 'relative', display: 'inline-block', cursor: hasBreakdown ? 'help' : 'default' }}
+      onMouseEnter={() => hasBreakdown && setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span style={{ fontSize: '0.8rem', color: '#64748b', borderBottom: hasBreakdown ? '1px dashed #94a3b8' : 'none' }}>
+        {rep.sa_submitted}/{rep.sa_total}
+      </span>
+      {visible && hasBreakdown && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          background: '#1e293b', color: '#f8fafc', borderRadius: '8px', padding: '10px 14px',
+          fontSize: '0.78rem', whiteSpace: 'nowrap', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: '6px', color: '#e2e8f0', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>SA Breakdown</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {(rep.sa_passed ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
+                <span style={{ color: '#86efac' }}>✓ Passed</span>
+                <span style={{ fontWeight: 700 }}>{rep.sa_passed}</span>
+              </div>
+            )}
+            {(rep.sa_failed ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
+                <span style={{ color: '#fca5a5' }}>✗ Failed</span>
+                <span style={{ fontWeight: 700 }}>{rep.sa_failed}</span>
+              </div>
+            )}
+            {(rep.sa_awaiting_review ?? 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
+                <span style={{ color: '#c4b5fd' }}>⏳ Awaiting review</span>
+                <span style={{ fontWeight: 700 }}>{rep.sa_awaiting_review}</span>
+              </div>
+            )}
+          </div>
+          {/* Arrow */}
+          <div style={{
+            position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+            width: 0, height: 0,
+            borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+            borderTop: '6px solid #1e293b',
+          }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -142,8 +200,8 @@ function GroupCard({ group, defaultOpen = false }) {
                     <CourseStatusBadge status={rep.course_status} />
                   </td>
                   {group.reps.some((r) => r.sa_total > 0) && (
-                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                      {rep.sa_total > 0 ? `${rep.sa_submitted}/${rep.sa_total}` : <span style={{ color: '#e2e8f0' }}>—</span>}
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <SaSubmittedCell rep={rep} />
                     </td>
                   )}
                   {group.reps.some((r) => r.sa_total > 0) && (
