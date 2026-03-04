@@ -10,9 +10,6 @@ import CourseBreakdown from './pages/CourseBreakdown';
 import Admin from './pages/Admin';
 import AssessmentDetail from './pages/AssessmentDetail';
 import CoachingSessionDetail from './pages/CoachingSessionDetail';
-import CourseBreakdown from './pages/CourseBreakdown';
-import CourseBreakdown from './pages/CourseBreakdown';
-import CourseBreakdown from './pages/CourseBreakdown';
 import Layout from './components/Layout';
 
 export default function App() {
