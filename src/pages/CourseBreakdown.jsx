@@ -17,20 +17,33 @@ function Avatar({ name }) {
   );
 }
 
-function StatusBadge({ pct, complete, status }) {
-  if (complete) return <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16a34a', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '99px', padding: '2px 8px' }}>Complete</span>;
-  if (pct > 0) return <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '99px', padding: '2px 8px' }}>In Progress</span>;
-  return <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px' }}>Not Started</span>;
+const STATUS_CONFIG = {
+  passed:         { label: 'Passed',          color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0' },
+  failed:         { label: 'Failed',          color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
+  pending_review: { label: 'Pending Review',  color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+  sa_pending:     { label: 'SA Required',     color: '#d97706', bg: '#fef3c7', border: '#fde68a' },
+  in_progress:    { label: 'In Progress',     color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  not_started:    { label: 'Not Started',     color: '#94a3b8', bg: '#f1f5f9', border: '#e2e8f0' },
+};
+
+function StatusBadge({ status }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.not_started;
+  return (
+    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: '99px', padding: '2px 8px', whiteSpace: 'nowrap' }}>
+      {cfg.label}
+    </span>
+  );
 }
 
-function LessonBar({ pct, complete }) {
-  const color = complete ? '#16a34a' : pct >= 50 ? '#2563eb' : pct > 0 ? '#d97706' : '#e2e8f0';
+function LessonBar({ pct, status }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.not_started;
+  const displayPct = (status === 'passed' || status === 'failed' || status === 'pending_review' || status === 'sa_pending') ? 100 : pct;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden' }}>
-        <div style={{ width: `${complete ? 100 : pct}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.3s ease' }} />
+        <div style={{ width: `${displayPct}%`, height: '100%', background: cfg.color, borderRadius: '3px', transition: 'width 0.3s ease' }} />
       </div>
-      <span style={{ fontSize: '0.75rem', fontWeight: 700, color, minWidth: '34px', textAlign: 'right' }}>{complete ? 100 : pct}%</span>
+      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: cfg.color, minWidth: '34px', textAlign: 'right' }}>{displayPct}%</span>
     </div>
   );
 }
@@ -56,9 +69,12 @@ function GroupCard({ group, defaultOpen = false }) {
               {roleLabelMap[group.role] || group.role}
             </span>
             <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{group.rep_count} rep{group.rep_count !== 1 ? 's' : ''}</span>
-            <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>{group.completed} complete</span>
-            {group.in_progress > 0 && <span style={{ fontSize: '0.75rem', color: '#d97706' }}>{group.in_progress} in progress</span>}
-            {group.not_started > 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{group.not_started} not started</span>}
+            {group.passed > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#16a34a', background: '#dcfce7', borderRadius: '99px', padding: '1px 7px' }}>{group.passed} passed</span>}
+            {group.failed > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#dc2626', background: '#fee2e2', borderRadius: '99px', padding: '1px 7px' }}>{group.failed} failed</span>}
+            {group.pending_review > 0 && <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#7c3aed', background: '#f5f3ff', borderRadius: '99px', padding: '1px 7px' }}>{group.pending_review} pending review</span>}
+            {group.sa_pending > 0 && <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', borderRadius: '99px', padding: '1px 7px' }}>{group.sa_pending} SA required</span>}
+            {group.in_progress > 0 && <span style={{ fontSize: '0.72rem', color: '#2563eb', background: '#eff6ff', borderRadius: '99px', padding: '1px 7px' }}>{group.in_progress} in progress</span>}
+            {group.not_started > 0 && <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#f1f5f9', borderRadius: '99px', padding: '1px 7px' }}>{group.not_started} not started</span>}
             {group.sa_avg_score != null && (
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: scoreColor(group.sa_avg_score), background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '99px', padding: '1px 7px' }}>
                 SA avg {group.sa_avg_score.toFixed(1)}/5
@@ -70,7 +86,7 @@ function GroupCard({ group, defaultOpen = false }) {
         {/* Completion bar */}
         <div style={{ width: '140px', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{group.completed}/{group.rep_count}</span>
+            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{group.passed}/{group.rep_count}</span>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: barColor }}>{pct}%</span>
           </div>
           <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden' }}>
@@ -103,7 +119,7 @@ function GroupCard({ group, defaultOpen = false }) {
                 )}
               </tr>
             </thead>
-            <tbody>
+              <tbody>
               {group.reps.map((rep) => (
                 <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '10px 16px' }}>
@@ -120,23 +136,23 @@ function GroupCard({ group, defaultOpen = false }) {
                     </div>
                   </td>
                   <td style={{ padding: '10px 12px', minWidth: '140px' }}>
-                    <LessonBar pct={rep.lesson_pct} complete={rep.course_complete} />
+                    <LessonBar pct={rep.lesson_pct} status={rep.status} />
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                    <StatusBadge pct={rep.lesson_pct} complete={rep.course_complete} />
+                    <StatusBadge status={rep.status} />
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                    {rep.course_complete ? `${rep.lessons_total}/${rep.lessons_total}` : `${rep.lessons_complete}/${rep.lessons_total}`}
+                    {rep.lessons_complete}/{rep.lessons_total}
                   </td>
                   {group.reps.some((r) => r.sa_total > 0) && (
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       {rep.sa_total > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                          <span style={{ fontSize: '0.75rem', color: rep.sa_completed > 0 ? '#7c3aed' : '#94a3b8', fontWeight: 600 }}>
-                            {rep.sa_completed}/{rep.sa_total}
+                          <span style={{ fontSize: '0.75rem', color: rep.sa_reviewed > 0 ? '#7c3aed' : '#94a3b8', fontWeight: 600 }}>
+                            {rep.sa_reviewed}/{rep.sa_total}
                           </span>
                           {rep.sa_avg_score != null && (
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: scoreColor(rep.sa_avg_score) }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: rep.sa_avg_score >= 3.0 ? '#16a34a' : '#dc2626' }}>
                               {rep.sa_avg_score.toFixed(1)}/5
                             </span>
                           )}
@@ -199,10 +215,11 @@ export default function CourseBreakdown() {
   );
   if (!data) return null;
 
-  const { course, total_reps, total_complete, completion_pct, groups } = data;
+  const {
+    course, total_reps, total_complete, total_failed, total_pending_review,
+    total_sa_pending, total_in_progress, total_not_started, completion_pct, groups,
+  } = data;
   const barColor = completion_pct === 100 ? '#16a34a' : completion_pct >= 50 ? '#2563eb' : '#d97706';
-  const inProgress = groups.reduce((s, g) => s + g.in_progress, 0);
-  const notStarted = groups.reduce((s, g) => s + g.not_started, 0);
   const saAvgScores = groups.filter((g) => g.sa_avg_score != null).map((g) => g.sa_avg_score);
   const overallSaAvg = saAvgScores.length > 0
     ? Math.round((saAvgScores.reduce((s, v) => s + v, 0) / saAvgScores.length) * 10) / 10
@@ -228,18 +245,36 @@ export default function CourseBreakdown() {
       <div className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card">
           <div className="stat-value" style={{ color: barColor }}>{completion_pct}%</div>
-          <div className="stat-label">Overall complete</div>
+          <div className="stat-label">Pass rate</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: '#16a34a' }}>{total_complete}</div>
-          <div className="stat-label">Completed</div>
+          <div className="stat-label">Passed</div>
         </div>
+        {total_failed > 0 && (
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: '#dc2626' }}>{total_failed}</div>
+            <div className="stat-label">Failed</div>
+          </div>
+        )}
+        {total_pending_review > 0 && (
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: '#7c3aed' }}>{total_pending_review}</div>
+            <div className="stat-label">Pending review</div>
+          </div>
+        )}
+        {total_sa_pending > 0 && (
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: '#d97706' }}>{total_sa_pending}</div>
+            <div className="stat-label">SA required</div>
+          </div>
+        )}
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#d97706' }}>{inProgress}</div>
+          <div className="stat-value" style={{ color: '#2563eb' }}>{total_in_progress}</div>
           <div className="stat-label">In progress</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{ color: '#94a3b8' }}>{notStarted}</div>
+          <div className="stat-value" style={{ color: '#94a3b8' }}>{total_not_started}</div>
           <div className="stat-label">Not started</div>
         </div>
         <div className="stat-card">
@@ -248,7 +283,9 @@ export default function CourseBreakdown() {
         </div>
         {overallSaAvg != null && (
           <div className="stat-card">
-            <div className="stat-value" style={{ color: scoreColor(overallSaAvg) }}>{overallSaAvg.toFixed(1)}<span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>/5</span></div>
+            <div className="stat-value" style={{ color: overallSaAvg >= 3.0 ? '#16a34a' : '#dc2626' }}>
+              {overallSaAvg.toFixed(1)}<span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>/5</span>
+            </div>
             <div className="stat-label">SA avg score</div>
           </div>
         )}
@@ -262,7 +299,7 @@ export default function CourseBreakdown() {
               <div style={{ width: `${completion_pct}%`, height: '100%', background: barColor, borderRadius: '5px', transition: 'width 0.4s ease' }} />
             </div>
             <span style={{ fontWeight: 700, fontSize: '1rem', color: barColor, minWidth: '50px' }}>{completion_pct}%</span>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{total_complete} / {total_reps} reps complete</span>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{total_complete} / {total_reps} reps passed</span>
           </div>
         </div>
       </div>
