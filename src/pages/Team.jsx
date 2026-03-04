@@ -806,8 +806,15 @@ export default function Team() {
                   const barColor = pct === 100 ? '#16a34a' : pct >= 50 ? '#2563eb' : '#d97706';
                   const saAvg = course.sa_avg_score;
                   const saAvgColor = saAvg == null ? '#7c3aed' : saAvg >= 4 ? '#16a34a' : saAvg >= 3 ? '#d97706' : '#dc2626';
+                  const courseUrl = `/team/course/${encodeURIComponent(effectiveUserId)}/${encodeURIComponent(course.hs_item_id)}`;
                   return (
-                    <div key={course.hs_item_id} style={{ paddingBottom: '16px', borderBottom: '1px solid #f1f5f9' }}>
+                    <Link
+                      key={course.hs_item_id}
+                      to={courseUrl}
+                      state={{ from: '/team', fromLabel: 'Team overview' }}
+                      className="course-row-link"
+                      style={{ display: 'block', paddingBottom: '16px', borderBottom: '1px solid #f1f5f9', textDecoration: 'none', borderRadius: '4px' }}
+                    >
                       {/* Course name + competency tag */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1e293b', flex: 1 }}>{course.name}</span>
@@ -845,7 +852,7 @@ export default function Team() {
                           )}
                         </div>
                       )}
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

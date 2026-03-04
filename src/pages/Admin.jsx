@@ -893,7 +893,7 @@ export default function Admin() {
           <div className="card-header"><h2 className="card-title">Create user</h2></div>
           <div className="card-body">
             <p style={{ margin: '0 0 14px', fontSize: '0.875rem', color: '#64748b' }}>
-              Creates a user account. They can sign in via magic link or Google. Share the dashboard URL with them.
+              Creates a user account. Share the dashboard URL — they sign in with their @turnitin.com Google account.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
               <div className="form-group" style={{ flex: 2, minWidth: '180px' }}>
