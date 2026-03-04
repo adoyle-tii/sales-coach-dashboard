@@ -677,7 +677,7 @@ export default function Admin() {
   }
 
   const userList = users || [];
-  const activeUserList = userList.filter((u) => u.status !== 'deactivated');
+  const activeUserList = userList.filter((u) => !u.status || u.status === 'active');
   const teamList = teams || [];
   const teamName = (id) => teamList.find((t) => t.id === id)?.name || '—';
   const shortTeamName = (name) => name?.replace(/'s Team$/i, '') ?? name;
