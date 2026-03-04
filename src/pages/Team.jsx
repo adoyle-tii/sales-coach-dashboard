@@ -583,7 +583,7 @@ export default function Team() {
                               </div>
                             </div>
                             <Link
-                              to={['leader','senior_leader','executive'].includes(report.role) ? `/team/view/${report.id}` : `/team/${report.id}`}
+                              to={['manager','leader','senior_leader','executive'].includes(report.role) ? `/team/view/${report.id}` : `/team/${report.id}`}
                               className="btn btn-ghost btn-sm"
                             >View team →</Link>
                           </div>
