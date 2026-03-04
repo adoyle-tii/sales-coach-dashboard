@@ -62,6 +62,9 @@ export default function Admin() {
   const [impersonateId, setImpersonateId] = useState('');
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deactivatingUserId, setDeactivatingUserId] = useState(null);
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState(null);
+  const [showDeactivated, setShowDeactivated] = useState(false);
 
   // Users table filters + sort
   const [filterSearch, setFilterSearch] = useState('');
@@ -119,7 +122,7 @@ export default function Admin() {
     setError(null);
     try {
       const [uRes, tRes] = await Promise.all([
-        supabase.from('users').select('id, email, full_name, role, sub_role, team_id, can_impersonate').order('email'),
+        supabase.from('users').select('id, email, full_name, role, sub_role, team_id, can_impersonate, status, deactivated_at').order('email'),
         supabase.from('teams').select('id, name, manager_id').order('name'),
       ]);
       if (uRes?.error) setError(uRes.error.message || 'Failed to load users.');
@@ -181,6 +184,23 @@ export default function Admin() {
       setMessage({ type: 'success', text: 'User removed.' });
     } catch (e) { setMessage({ type: 'error', text: e?.message || 'Failed to delete user.' }); }
     finally { setDeletingUserId(null); }
+  }
+
+  async function deactivateUser(userId) {
+    setDeactivatingUserId(userId); setMessage(null); setConfirmDeactivateId(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { setMessage({ type: 'error', text: 'Not signed in.' }); return; }
+      const res = await fetch(`${WORKER_URL}/admin/deactivate-user?user_id=${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMessage({ type: 'error', text: json.error || 'Failed to deactivate user.' }); return; }
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'deactivated', deactivated_at: new Date().toISOString(), team_id: null } : u));
+      setMessage({ type: 'success', text: 'User deactivated.' });
+    } catch (e) { setMessage({ type: 'error', text: e?.message || 'Failed to deactivate user.' }); }
+    finally { setDeactivatingUserId(null); }
   }
 
   async function promoteByEmail() {
@@ -670,6 +690,7 @@ export default function Admin() {
 
   const filteredUsers = userList
     .filter((u) => {
+      if (!showDeactivated && u.status === 'deactivated') return false;
       const q = filterSearch.toLowerCase();
       if (q && !((u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))) return false;
       if (filterRole && u.role !== filterRole) return false;
@@ -713,11 +734,18 @@ export default function Admin() {
 
       {/* Summary stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        {/* Total users */}
+        {/* Total users (active only) */}
         <div className="stat-card">
-          <div className="stat-value">{userList.length}</div>
-          <div className="stat-label">Total users</div>
+          <div className="stat-value">{userList.filter((u) => u.status !== 'deactivated').length}</div>
+          <div className="stat-label">Active users</div>
         </div>
+        {/* Deactivated */}
+        {userList.some((u) => u.status === 'deactivated') && (
+          <div className="stat-card" style={{ cursor: 'pointer', border: showDeactivated ? '1.5px solid #94a3b8' : undefined }} onClick={() => setShowDeactivated((v) => !v)} title="Click to toggle deactivated users">
+            <div className="stat-value" style={{ color: '#94a3b8' }}>{userList.filter((u) => u.status === 'deactivated').length}</div>
+            <div className="stat-label" style={{ color: '#94a3b8' }}>Deactivated</div>
+          </div>
+        )}
         {/* Teams */}
         <div className="stat-card">
           <div className="stat-value">{teamList.length}</div>
@@ -952,6 +980,17 @@ export default function Admin() {
               Clear filters
             </button>
           )}
+          {userList.some((u) => u.status === 'deactivated') && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none', marginLeft: 'auto' }}>
+              <input
+                type="checkbox"
+                checked={showDeactivated}
+                onChange={(e) => setShowDeactivated(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Show deactivated
+            </label>
+          )}
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -978,21 +1017,32 @@ export default function Admin() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((u) => (
-                <tr key={u.id}>
+              {filteredUsers.map((u) => {
+                const isDeactivated = u.status === 'deactivated';
+                const rowStyle = isDeactivated ? { opacity: 0.5 } : {};
+                const textStyle = isDeactivated ? { textDecoration: 'line-through', color: '#94a3b8' } : {};
+                return (
+                <tr key={u.id} style={rowStyle}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div className="avatar avatar-sm" style={{ fontSize: '0.65rem' }}>
+                      <div className="avatar avatar-sm" style={{ fontSize: '0.65rem', ...(isDeactivated ? { background: '#e2e8f0', color: '#94a3b8' } : {}) }}>
                         {(u.full_name || u.email || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
                       </div>
-                      <span style={{ fontWeight: 500 }}>{u.full_name || '—'}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontWeight: 500, ...textStyle }}>{u.full_name || '—'}</span>
+                        {isDeactivated && (
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '1px 6px', width: 'fit-content' }}>
+                            Deactivated
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
-                  <td style={{ color: '#64748b' }}>{u.email || '—'}</td>
+                  <td style={{ color: '#64748b', ...textStyle }}>{u.email || '—'}</td>
                   <td>
                     {u.role === 'superadmin' ? (
                       <RoleBadge role="superadmin" />
-                    ) : isSuperadmin ? (
+                    ) : isSuperadmin && !isDeactivated ? (
                       <select
                         className="form-select"
                         value={u.role}
@@ -1007,7 +1057,7 @@ export default function Admin() {
                     )}
                   </td>
                   <td>
-                    {isSuperadmin && (u.role === 'rep') ? (
+                    {isSuperadmin && u.role === 'rep' && !isDeactivated ? (
                       <select
                         className="form-select"
                         value={u.sub_role || ''}
@@ -1018,11 +1068,11 @@ export default function Admin() {
                         {SUB_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
                     ) : (
-                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{u.sub_role ? u.sub_role.toUpperCase() : '—'}</span>
+                      <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>{u.sub_role ? u.sub_role.toUpperCase() : '—'}</span>
                     )}
                   </td>
                   <td>
-                    {isSuperadmin ? (
+                    {isSuperadmin && !isDeactivated ? (
                       <select
                         className="form-select"
                         value={u.team_id || ''}
@@ -1034,11 +1084,11 @@ export default function Admin() {
                         {teamList.map((t) => <option key={t.id} value={t.id}>{shortTeamName(t.name)}</option>)}
                       </select>
                     ) : (
-                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{shortTeamName(teamName(u.team_id))}</span>
+                      <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>—</span>
                     )}
                   </td>
                   <td>
-                    {canImpersonate && u.id !== currentUserId && (
+                    {canImpersonate && u.id !== currentUserId && !isDeactivated && (
                       <button
                         type="button"
                         className="btn btn-impersonate btn-xs"
@@ -1051,42 +1101,79 @@ export default function Admin() {
                   {isSuperadmin && (
                     <td>
                       {u.role !== 'superadmin' && u.role !== 'admin' && u.id !== currentUserId && (
-                        confirmDeleteId === u.id ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#dc2626', whiteSpace: 'nowrap' }}>Remove?</span>
-                            <button
-                              type="button"
-                              className="btn btn-xs"
-                              style={{ background: '#dc2626', color: '#fff', border: 'none', fontSize: '0.75rem', padding: '2px 8px' }}
-                              disabled={deletingUserId === u.id}
-                              onClick={() => deleteUser(u.id)}
-                            >
-                              {deletingUserId === u.id ? '…' : 'Yes'}
-                            </button>
+                        isDeactivated ? (
+                          /* Purge (hard delete) for deactivated users */
+                          confirmDeleteId === u.id ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#dc2626', whiteSpace: 'nowrap' }}>Purge all data?</span>
+                              <button
+                                type="button"
+                                className="btn btn-xs"
+                                style={{ background: '#dc2626', color: '#fff', border: 'none', fontSize: '0.75rem', padding: '2px 8px' }}
+                                disabled={deletingUserId === u.id}
+                                onClick={() => deleteUser(u.id)}
+                              >
+                                {deletingUserId === u.id ? '…' : 'Yes, purge'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
                             <button
                               type="button"
                               className="btn btn-ghost btn-xs"
-                              style={{ fontSize: '0.75rem', padding: '2px 8px' }}
-                              onClick={() => setConfirmDeleteId(null)}
+                              style={{ fontSize: '0.75rem', padding: '2px 8px', color: '#dc2626' }}
+                              onClick={() => setConfirmDeleteId(u.id)}
                             >
-                              No
+                              Purge
                             </button>
-                          </span>
+                          )
                         ) : (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            style={{ fontSize: '0.75rem', padding: '2px 8px', color: '#dc2626' }}
-                            onClick={() => setConfirmDeleteId(u.id)}
-                          >
-                            Remove
-                          </button>
+                          /* Deactivate (soft) for active users */
+                          confirmDeactivateId === u.id ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '0.75rem', color: '#b45309', whiteSpace: 'nowrap' }}>Deactivate?</span>
+                              <button
+                                type="button"
+                                className="btn btn-xs"
+                                style={{ background: '#b45309', color: '#fff', border: 'none', fontSize: '0.75rem', padding: '2px 8px' }}
+                                disabled={deactivatingUserId === u.id}
+                                onClick={() => deactivateUser(u.id)}
+                              >
+                                {deactivatingUserId === u.id ? '…' : 'Yes'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                                onClick={() => setConfirmDeactivateId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              style={{ fontSize: '0.75rem', padding: '2px 8px', color: '#b45309' }}
+                              onClick={() => setConfirmDeactivateId(u.id)}
+                            >
+                              Deactivate
+                            </button>
+                          )
                         )
                       )}
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {filteredUsers.length === 0 && (
