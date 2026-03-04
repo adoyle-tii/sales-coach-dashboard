@@ -93,6 +93,7 @@ export default function Team() {
   const [sortDir, setSortDir] = useState('desc');
   const [teamCourses, setTeamCourses] = useState([]);
   const [teamCoursesLoading, setTeamCoursesLoading] = useState(false);
+  const [teamCoursesError, setTeamCoursesError] = useState(null);
 
   const handleSort = useCallback((col) => {
     setSortCol((prev) => {
@@ -153,6 +154,7 @@ export default function Team() {
 
           // Also load overall course rollup for self (full downstream)
           setTeamCoursesLoading(true);
+          setTeamCoursesError(null);
           try {
             const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
             const rawText = await cRes.text();
@@ -161,11 +163,15 @@ export default function Team() {
               const d = JSON.parse(rawText);
               console.log('[Team] overall rollup courses count:', d.courses?.length, 'memberCount:', d.memberCount);
               setTeamCourses(d.courses || []);
+              if (!d.courses?.length) setTeamCoursesError(`Worker returned 0 courses (memberCount: ${d.memberCount ?? '?'})`);
             } else {
-              console.warn('[Team] overall rollup failed:', cRes.status, rawText);
+              const errMsg = `Worker error ${cRes.status}: ${rawText.slice(0, 200)}`;
+              console.warn('[Team] overall rollup failed:', errMsg);
+              setTeamCoursesError(errMsg);
             }
           } catch (err) {
             console.warn('[Team] overall rollup error:', err);
+            setTeamCoursesError(String(err));
           } finally { setTeamCoursesLoading(false); }
 
         } else {
@@ -214,11 +220,16 @@ export default function Team() {
 
           // Course completion rollup
           setTeamCoursesLoading(true);
+          setTeamCoursesError(null);
           try {
             const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
-            if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
+            const rawText = await cRes.text();
+            console.log('[Team] manager rollup status:', cRes.status, 'body:', rawText.slice(0, 300));
+            if (cRes.ok) { const d = JSON.parse(rawText); setTeamCourses(d.courses || []); }
+            else setTeamCoursesError(`Worker error ${cRes.status}: ${rawText.slice(0, 200)}`);
           } catch (err) {
             console.warn('[Team] manager rollup error:', err);
+            setTeamCoursesError(String(err));
           } finally { setTeamCoursesLoading(false); }
         }
 
