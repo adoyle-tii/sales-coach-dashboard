@@ -569,7 +569,7 @@ export default function Admin() {
       // ── items ──────────────────────────────────────────────
       if (csvFiles.items) {
         const rows = parseCsvBrowser(csvFiles.items)
-          .map((r) => ({ id: r.id || null, name: r.name || null, item_type: r.item_type || r.type || null, created_at: r.created_at || null }))
+          .map((r) => ({ id: r.id || null, name: r.name || null, kind: r.kind || r.item_type || r.type || null, title_external: r.title_external || null }))
           .filter((r) => r.id);
         counts.items = await truncateAndInsert('hs_raw_items', rows, 'items.csv', setProgress);
       }
@@ -577,8 +577,8 @@ export default function Admin() {
       // ── course_lessons ─────────────────────────────────────
       if (csvFiles.course_lessons) {
         const rows = parseCsvBrowser(csvFiles.course_lessons)
-          .map((r) => ({ id: r.id || null, course_id: r.course_id || null, name: r.name || null, lesson_type: r.lesson_type || r.type || null, position: r.position ? parseInt(r.position) : null }))
-          .filter((r) => r.id && r.course_id);
+          .map((r) => ({ item_id: r.item_id || r.id || null, course_id: r.course_id || null, position: r.position || null }))
+          .filter((r) => r.item_id && r.course_id);
         counts.course_lessons = await truncateAndInsert('hs_raw_course_lessons', rows, 'course_lessons.csv', setProgress);
       }
 
