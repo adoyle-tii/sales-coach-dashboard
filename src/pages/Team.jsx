@@ -103,6 +103,12 @@ export default function Team() {
   }, []);
 
   useEffect(() => {
+    // Wait until effectiveProfile is resolved before running.
+    // Both /team/view/:viewAsId and impersonation-via-sessionStorage fetch profiles async,
+    // so myRole can be undefined or wrong on the first render. Running early causes the wrong
+    // branch (manager vs hierarchy) to fire with stale data.
+    if (!effectiveProfile) return;
+
     (async () => {
       try {
         if (!effectiveUserId || !supabase) { setLoading(false); return; }
@@ -112,11 +118,12 @@ export default function Team() {
         const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
 
         if (isHierarchy) {
-          // ── Hierarchy view: load direct reports ──
+          // ── Hierarchy view: load direct reports (active only) ──
           const { data: reports } = await supabase
             .from('users')
             .select('id, full_name, email, role, sub_role, team_id')
-            .eq('reports_to', effectiveUserId);
+            .eq('reports_to', effectiveUserId)
+            .eq('status', 'active');
           const reportList = (reports ?? []).filter((u) => !['superadmin','admin'].includes(u.role));
           setDirectReports(reportList);
 
@@ -148,8 +155,15 @@ export default function Team() {
           setTeamCoursesLoading(true);
           try {
             const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
-            if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
-          } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
+            if (cRes.ok) {
+              const d = await cRes.json().catch(() => ({}));
+              setTeamCourses(d.courses || []);
+            } else {
+              console.warn('[Team] overall rollup failed:', cRes.status, await cRes.text().catch(() => ''));
+            }
+          } catch (err) {
+            console.warn('[Team] overall rollup error:', err);
+          } finally { setTeamCoursesLoading(false); }
 
         } else {
           // ── Standard manager view: load direct rep reports ──
@@ -200,7 +214,9 @@ export default function Team() {
           try {
             const cRes = await fetch(`${WORKER_URL}/hs/team-completion/${encodeURIComponent(effectiveUserId)}`, { headers: authHeaders });
             if (cRes.ok) { const d = await cRes.json().catch(() => ({})); setTeamCourses(d.courses || []); }
-          } catch { /* ignore */ } finally { setTeamCoursesLoading(false); }
+          } catch (err) {
+            console.warn('[Team] manager rollup error:', err);
+          } finally { setTeamCoursesLoading(false); }
         }
 
       } catch {
@@ -209,7 +225,7 @@ export default function Team() {
         setLoading(false);
       }
     })();
-  }, [effectiveUserId, isHierarchy]);
+  }, [effectiveUserId, isHierarchy, effectiveProfile]);
 
   if (loading) return <div className="loading-screen"><div className="spinner" /> Loading team…</div>;
 
