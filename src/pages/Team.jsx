@@ -613,8 +613,15 @@ export default function Team() {
     <div>
       {/* Header */}
       <div className="page-header">
-        <h1 className="page-title">Team overview</h1>
-        <p className="page-subtitle">Skills performance and coaching activity across your team.</p>
+        <h1 className="page-title">
+          {viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s Team` : 'Team overview'}
+        </h1>
+        <p className="page-subtitle">
+          {viewAsId
+            ? <><Link to="/team" className="text-link">← Back to your overview</Link> &nbsp;·&nbsp; Skills performance and coaching activity for {effectiveProfile?.full_name || 'this manager'}'s team.</>
+            : 'Skills performance and coaching activity across your team.'
+          }
+        </p>
       </div>
 
       {/* Summary stats */}

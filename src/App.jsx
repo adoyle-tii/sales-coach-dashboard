@@ -23,40 +23,65 @@ export default function App() {
       return;
     }
 
+    // onAuthStateChange fires synchronously for the initial session
+    // (including after an OAuth callback hash exchange), so we rely on it
+    // as the single source of truth and only use getSession() as a fallback
+    // to end the loading state if the auth event is slow.
+    let initialised = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      initialised = true;
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    // Fallback: if onAuthStateChange hasn't fired within the tick,
+    // getSession() will resolve it (covers cases where no event fires).
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
-      setLoading(false);
+      if (!initialised) {
+        setUser(session?.user ?? null);
+        if (session?.user) fetchProfile(session.user.id);
+        else {
+          setProfile(null);
+          setLoading(false);
+        }
+      }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
-    });
+
     return () => subscription?.unsubscribe();
   }, []);
 
   async function fetchProfile(userId) {
-    if (!supabase) return;
-    const { data: rpcData } = await supabase.rpc('get_my_profile');
-    if (rpcData && Array.isArray(rpcData) && rpcData[0]) {
-      const row = rpcData[0];
-      setProfile({
-        id: row.id,
-        role: row.role,
-        full_name: row.full_name,
-        can_impersonate: row.can_impersonate ?? false,
-      });
+    if (!supabase) {
+      setLoading(false);
       return;
     }
-    const { data } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).single();
-    if (data) {
-      setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
-      return;
+    try {
+      const { data: rpcData } = await supabase.rpc('get_my_profile');
+      if (rpcData && Array.isArray(rpcData) && rpcData[0]) {
+        const row = rpcData[0];
+        setProfile({
+          id: row.id,
+          role: row.role,
+          full_name: row.full_name,
+          can_impersonate: row.can_impersonate ?? false,
+        });
+        return;
+      }
+      const { data } = await supabase.from('users').select('id, role, full_name, can_impersonate').eq('id', userId).single();
+      if (data) {
+        setProfile({ ...data, can_impersonate: data.can_impersonate ?? false });
+        return;
+      }
+      const { data: fallback } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
+      setProfile(fallback ? { ...fallback, can_impersonate: false } : null);
+    } finally {
+      setLoading(false);
     }
-    const { data: fallback } = await supabase.from('users').select('id, role, full_name').eq('id', userId).single();
-    setProfile(fallback ? { ...fallback, can_impersonate: false } : null);
   }
 
   if (loading) {
@@ -87,18 +112,19 @@ export default function App() {
 
   if (user && profile === null) {
     return (
-      <div style={{ maxWidth: '560px', margin: '40px auto', padding: '24px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px' }}>
-        <h2 style={{ marginTop: 0, color: '#92400e' }}>Profile not found</h2>
-        <p style={{ color: '#78350f', marginBottom: '16px' }}>
-          You're signed in as <strong>{user.email}</strong>, but there's no matching row in <code>public.users</code> or it's not visible (e.g. RLS). Without that, your role can't be loaded and the Admin panel won't show.
-        </p>
-        <p style={{ color: '#78350f', marginBottom: '12px' }}>
-          To set yourself as superadmin, run this in the Supabase SQL Editor (replace the email with yours):
-        </p>
-        <pre style={{ padding: '12px', background: '#fef3c7', borderRadius: '6px', overflow: 'auto', fontSize: '0.8125rem' }}>{`UPDATE public.users\nSET role = 'superadmin'\nWHERE email = '${user.email || 'your@email.com'}';`}</pre>
-        <p style={{ color: '#78350f', marginTop: '16px', marginBottom: 0 }}>
-          If your email doesn't exist in <code>public.users</code> yet, sign in once so the trigger creates a row, then run the UPDATE above. After that, refresh this page.
-        </p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '24px' }}>
+        <div style={{ maxWidth: '480px', width: '100%', background: 'white', border: '1px solid #fcd34d', borderRadius: '12px', padding: '32px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+          <h2 style={{ marginTop: 0, color: '#92400e', fontSize: '1.2rem' }}>Access not provisioned</h2>
+          <p style={{ color: '#78350f', marginBottom: '20px', lineHeight: '1.6' }}>
+            You've signed in as <strong>{user.email}</strong>, but your account hasn't been set up in the system yet. Please contact your administrator to get access.
+          </p>
+          <button
+            onClick={() => supabase?.auth.signOut()}
+            style={{ padding: '10px 20px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     );
   }
