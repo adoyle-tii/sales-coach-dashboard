@@ -442,6 +442,7 @@ export default function Team() {
                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{course.content_complete ?? course.completed} / {course.member_count}</span>
                         {(course.passed > 0) && <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '1px 5px' }}>{course.passed} passed</span>}
                         {(course.pending_review > 0) && <span style={{ fontSize: '0.72rem', color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px', padding: '1px 5px' }}>{course.pending_review} pending review</span>}
+                        {(course.sa_required > 0) && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px' }}>{course.sa_required} SA required</span>}
                         {(course.in_progress > 0) && <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px' }}>{course.in_progress} in progress</span>}
                       </div>
                       <div style={{ height: '8px', borderRadius: '4px', background: '#e2e8f0', overflow: 'hidden', marginBottom: '4px' }}>
@@ -489,6 +490,7 @@ export default function Team() {
                   <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{course.content_complete ?? course.completed}/{course.member_count}</span>
                   {(course.passed > 0) && <span style={{ fontSize: '0.68rem', color: '#16a34a', background: '#dcfce7', borderRadius: '4px', padding: '0px 4px' }}>{course.passed} passed</span>}
                   {(course.pending_review > 0) && <span style={{ fontSize: '0.68rem', color: '#7c3aed', background: '#f5f3ff', borderRadius: '4px', padding: '0px 4px' }}>{course.pending_review} pending</span>}
+                  {(course.sa_required > 0) && <span style={{ fontSize: '0.68rem', color: '#b45309', background: '#fffbeb', borderRadius: '4px', padding: '0px 4px' }}>{course.sa_required} SA req</span>}
                 </div>
                 <div style={{ height: '6px', borderRadius: '3px', background: '#e2e8f0', overflow: 'hidden', marginBottom: course.sa_count > 0 ? '3px' : 0 }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: '3px', transition: 'width 0.3s ease' }} />
@@ -895,6 +897,7 @@ export default function Team() {
                         <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{course.content_complete ?? course.completed} / {course.member_count} complete</span>
                         {(course.passed > 0) && <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.passed} passed</span>}
                         {(course.pending_review > 0) && <span style={{ fontSize: '0.72rem', color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.pending_review} pending review</span>}
+                        {(course.sa_required > 0) && <span style={{ fontSize: '0.72rem', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.sa_required} SA required</span>}
                         {(course.in_progress > 0) && <span style={{ fontSize: '0.72rem', color: '#d97706', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>{course.in_progress} in progress</span>}
                       </div>
                       {/* SA pass rate row */}

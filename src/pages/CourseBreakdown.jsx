@@ -19,6 +19,7 @@ const COURSE_STATUS_CONFIG = {
   passed:         { label: 'Passed',         color: '#16a34a', bg: '#dcfce7', border: '#bbf7d0' },
   failed:         { label: 'Failed',         color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
   pending_review: { label: 'Pending Review', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+  sa_required:    { label: 'SA Required',    color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
   in_progress:    { label: 'In Progress',    color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
   not_started:    { label: 'Not Started',    color: '#94a3b8', bg: '#f1f5f9', border: '#e2e8f0' },
 };
@@ -30,7 +31,10 @@ function CourseStatusBadge({ status }) {
 
 function LessonBar({ pct, courseStatus }) {
   const barColor = pct === 100
-    ? (courseStatus === 'passed' ? '#16a34a' : courseStatus === 'failed' ? '#dc2626' : '#7c3aed')
+    ? (courseStatus === 'passed' ? '#16a34a'
+      : courseStatus === 'failed' ? '#dc2626'
+      : courseStatus === 'sa_required' ? '#d97706'
+      : '#7c3aed')
     : pct > 0 ? '#2563eb' : '#e2e8f0';
   const cfg = { color: barColor };
   return (
@@ -270,7 +274,7 @@ export default function CourseBreakdown() {
 
   const {
     course, total_reps,
-    total_passed, total_failed, total_pending_review, total_in_progress, total_not_started,
+    total_passed, total_failed, total_pending_review, total_sa_required, total_in_progress, total_not_started,
     total_content_complete, content_pct, pass_pct,
     groups,
   } = data;
@@ -315,6 +319,12 @@ export default function CourseBreakdown() {
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#7c3aed' }}>{total_pending_review}</div>
             <div className="stat-label">Pending review</div>
+          </div>
+        )}
+        {(total_sa_required ?? 0) > 0 && (
+          <div className="stat-card">
+            <div className="stat-value" style={{ color: '#d97706' }}>{total_sa_required}</div>
+            <div className="stat-label">SA required</div>
           </div>
         )}
         {(total_in_progress ?? 0) > 0 && (
