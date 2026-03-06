@@ -396,14 +396,24 @@ export default function Admin() {
         if (!res.ok) { setUserSyncError(`Upload failed on ${step.table}: ${json.error || res.status}`); return; }
       }
 
-      // Step 2: Provision Supabase Auth accounts for mapped users who don't have one yet
-      const provRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=provision_users`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authH }, body: JSON.stringify({}),
-      });
-      const provJson = await provRes.json().catch(() => ({}));
-      if (!provRes.ok) { setUserSyncError(`Provision step failed: ${provJson.error || provRes.status}`); return; }
-      const provisioned = provJson.provisioned ?? 0;
-      const provErrors = provJson.errors?.length ?? 0;
+      // Step 2: Get candidate list from DB then provision via Admin API in batches of 50
+      const candidatesRes = await supabase.rpc('hs_get_unprovision_users');
+      if (candidatesRes.error) { setUserSyncError(`Provision step failed: ${candidatesRes.error.message}`); return; }
+      const candidates = candidatesRes.data || [];
+      const BATCH = 50;
+      let provisioned = 0, provErrors = 0;
+      for (let i = 0; i < candidates.length; i += BATCH) {
+        const batch = candidates.slice(i, i + BATCH);
+        const provRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=provision_users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authH },
+          body: JSON.stringify({ users: batch }),
+        });
+        const provJson = await provRes.json().catch(() => ({}));
+        if (!provRes.ok) { setUserSyncError(`Provision step failed: ${provJson.error || provRes.status}`); return; }
+        provisioned += provJson.provisioned ?? 0;
+        provErrors  += provJson.errors?.length ?? 0;
+      }
 
       // Step 3: Finalize — set roles, sub_roles, manager teams
       const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_users`, {
