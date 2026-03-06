@@ -400,7 +400,7 @@ export default function Admin() {
       const candidatesRes = await supabase.rpc('hs_get_unprovision_users');
       if (candidatesRes.error) { setUserSyncError(`Provision step failed: ${candidatesRes.error.message}`); return; }
       const candidates = candidatesRes.data || [];
-      const BATCH = 50;
+      const BATCH = 25;
       let provisioned = 0, provErrors = 0;
       for (let i = 0; i < candidates.length; i += BATCH) {
         const batch = candidates.slice(i, i + BATCH);
