@@ -11,8 +11,10 @@ export default function Layout({ user, profile, onSignOut }) {
   const location = useLocation();
   const { viewProfile, isImpersonating, exitImpersonation, realProfile } = useImpersonation();
   const displayProfile = viewProfile ?? profile;
-  const isAdmin = realProfile?.role === 'superadmin' || (realProfile?.role === 'admin' && realProfile?.can_impersonate);
-  const isManager = realProfile?.role === 'manager' || realProfile?.role === 'admin' || realProfile?.role === 'superadmin';
+  // When impersonating, show nav links for the impersonated user's role
+  const navProfile = isImpersonating ? displayProfile : realProfile;
+  const isAdmin = !isImpersonating && (realProfile?.role === 'superadmin' || (realProfile?.role === 'admin' && realProfile?.can_impersonate));
+  const isManager = ['manager', 'leader', 'senior_leader', 'executive', 'admin', 'superadmin'].includes(navProfile?.role);
 
   const active = (path) => location.pathname.startsWith(path) ? 'active' : '';
 
