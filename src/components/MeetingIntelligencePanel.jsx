@@ -252,23 +252,23 @@ function OrgMeetingIntelligence({ token }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>{data.reps_with_meetings_ytd ?? '—'}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>recording<br/>meetings YTD</span>
-                  </div>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
+              <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
                 </div>
-                {data.total_team_reps > 0 && data.reps_with_meetings_ytd != null && (
-                  <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
-                    <div style={{
-                      height: '100%', borderRadius: '3px', background: '#2563eb',
-                      width: `${Math.round((data.reps_with_meetings_ytd / data.total_team_reps) * 100)}%`,
-                      transition: 'width 0.4s ease',
-                    }} />
-                  </div>
-                )}
-                <div style={{ height: '1px', background: '#bfdbfe' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_no_meetings_ytd ?? '—'}</span>
-                  <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>never recorded<br/>a meeting {data.current_year ?? ''}</span>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
+              </div>
+              {data.total_team_reps > 0 && data.reps_with_meetings_ytd != null && (
+                <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '3px', background: '#2563eb',
+                    width: `${Math.round((data.reps_with_meetings_ytd / data.total_team_reps) * 100)}%`,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
+              <div style={{ height: '1px', background: '#bfdbfe' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_no_meetings_ytd ?? '—'}</span>
+                <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>not hosted<br/>a meeting {data.current_year ?? ''}</span>
                 </div>
               </div>
             </div>
@@ -469,7 +469,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                   <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>
                     {s.reps_with_meetings_ytd ?? '—'}
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>recording<br/>meetings YTD</span>
+                  <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
                 </div>
                 <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>
                   of {s.total_team_reps ?? '—'}
@@ -492,7 +492,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                   {s.reps_no_meetings_ytd ?? '—'}
                 </span>
                 <span style={{ fontSize: '0.72rem', color: s.reps_no_meetings_ytd > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>
-                  never recorded<br/>a meeting {s.current_year ?? ''}
+                  not hosted<br/>a meeting {s.current_year ?? ''}
                 </span>
               </div>
             </div>
