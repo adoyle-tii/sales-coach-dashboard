@@ -60,7 +60,12 @@ export default function RegionalDashboard() {
         });
         if (!res.ok) { setRegionsError(`Failed to load regions (${res.status})`); return; }
         const d = await res.json();
-        const list = d.regions || [];
+        let list = d.regions || [];
+        // When viewing as (or impersonating) a senior_leader, restrict to
+        // only the regions they are assigned RVP of.
+        if (isSeniorLeader) {
+          list = list.filter((r) => r.rvp_id === dataUserId);
+        }
         setRegions(list);
         if (list.length > 0 && !selectedRegionId) setSelectedRegionId(list[0].id);
       } catch (e) {

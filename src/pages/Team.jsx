@@ -161,7 +161,13 @@ export default function Team() {
                 });
                 if (regRes.ok) {
                   const rd = await regRes.json();
-                  setAvailableRegions(rd.regions || []);
+                  let regionList = rd.regions || [];
+                  // When viewing as (or impersonating) a senior_leader, restrict to
+                  // only the regions they are assigned RVP of.
+                  if (myRole === 'senior_leader') {
+                    regionList = regionList.filter((r) => r.rvp_id === effectiveUserId);
+                  }
+                  setAvailableRegions(regionList);
                 }
                 const { data: teamsData } = await supabase.from('teams').select('id, region_id');
                 if (teamsData) {
