@@ -132,15 +132,18 @@ function TalkPctBadge({ pct }) {
 
 // ── Org-wide panel (CRO / executive / senior_leader) ────────────────────────
 
-function OrgMeetingIntelligence({ token }) {
+function OrgMeetingIntelligence({ token, regionId }) {
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
 
   useEffect(() => {
+    setData(null); setLoading(true); setError(null);
     (async () => {
       try {
-        const res = await fetch(`${WORKER_URL}/hs/meeting-intelligence/org?months=12`, {
+        const params = new URLSearchParams({ months: '12' });
+        if (regionId) params.set('regionId', regionId);
+        const res = await fetch(`${WORKER_URL}/hs/meeting-intelligence/org?${params}`, {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -154,7 +157,7 @@ function OrgMeetingIntelligence({ token }) {
         setLoading(false);
       }
     })();
-  }, [token]);
+  }, [token, regionId]);
 
   if (loading) return (
     <div className="card" style={{ marginBottom: '24px' }}>
@@ -640,10 +643,11 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
  *   mode       'org' | 'team'
  *   token      Supabase access_token (string)
  *   teamIntel  Pre-fetched team intel data (for 'team' mode — avoids double fetch)
+ *   regionId   Optional UUID — when provided, scopes the org view to that region
  */
-export default function MeetingIntelligencePanel({ mode, token, teamIntel }) {
+export default function MeetingIntelligencePanel({ mode, token, teamIntel, regionId }) {
   if (mode === 'org') {
-    return <OrgMeetingIntelligence token={token} />;
+    return <OrgMeetingIntelligence token={token} regionId={regionId} />;
   }
   // 'team' mode uses pre-fetched data passed from Team.jsx
   return <TeamMeetingIntelligenceSummary teamIntel={teamIntel} />;

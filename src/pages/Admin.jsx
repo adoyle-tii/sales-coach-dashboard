@@ -123,6 +123,33 @@ export default function Admin() {
   const [resetMsg, setResetMsg]                         = useState(null);
   const [scraperAutoRefresh, setScraperAutoRefresh]     = useState(false);
 
+  // Regional Management state
+  const [regionalOpen, setRegionalOpen]               = useState(false);
+  const [regionalTab, setRegionalTab]                 = useState('regions'); // 'regions' | 'teams'
+  const [regions, setRegions]                         = useState([]);
+  const [regionSubRegions, setRegionSubRegions]       = useState({}); // { [regionId]: sub_region[] }
+  const [regionTeams, setRegionTeams]                 = useState([]); // all teams with region info
+  const [allSubRegions, setAllSubRegions]             = useState([]); // flat list from /admin/teams response
+  const [rvpCandidates, setRvpCandidates]             = useState([]); // senior_leaders
+  const [regionalLoading, setRegionalLoading]         = useState(false);
+  const [regionalError, setRegionalError]             = useState(null);
+  const [regionalMsg, setRegionalMsg]                 = useState(null);
+  // New region form
+  const [newRegionName, setNewRegionName]             = useState('');
+  const [newRegionRvp, setNewRegionRvp]               = useState('');
+  const [newRegionSaving, setNewRegionSaving]         = useState(false);
+  // Inline region editing
+  const [editingRegion, setEditingRegion]             = useState(null); // { id, name, rvp_id }
+  const [editRegionSaving, setEditRegionSaving]       = useState(false);
+  // Delete confirm
+  const [confirmDeleteRegion, setConfirmDeleteRegion] = useState(null);
+  // Sub-region management — expanded region panel
+  const [expandedSubRegion, setExpandedSubRegion]     = useState(null); // regionId
+  const [newSubRegionName, setNewSubRegionName]       = useState('');
+  const [newSubRegionSaving, setNewSubRegionSaving]   = useState(false);
+  const [editingSubRegion, setEditingSubRegion]       = useState(null); // { id, name }
+  const [editSubRegionSaving, setEditSubRegionSaving] = useState(false);
+
   // Meeting Intelligence ingest state
   const [meetingIngestOpen, setMeetingIngestOpen]       = useState(false);
   const [meetingIngestLoading, setMeetingIngestLoading] = useState(false);
@@ -290,6 +317,176 @@ export default function Admin() {
   async function getAuthHeaders() {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+  }
+
+  async function loadRegionalData() {
+    setRegionalLoading(true); setRegionalError(null);
+    try {
+      const authH = await getAuthHeaders();
+      const h = { 'Content-Type': 'application/json', ...authH };
+      const [regRes, teamsRes] = await Promise.all([
+        fetch(`${WORKER_URL}/admin/regions`, { headers: h }),
+        fetch(`${WORKER_URL}/admin/teams`, { headers: h }),
+      ]);
+      if (regRes.ok) {
+        const d = await regRes.json();
+        setRegions(d.regions || []);
+        setRvpCandidates(d.rvps || []);
+        // Build regionSubRegions map by fetching sub-regions for each region
+        // We'll fetch them lazily when a region's sub-region panel expands;
+        // for counts we use the region.sub_region_count from the list response
+      }
+      if (teamsRes.ok) {
+        const d = await teamsRes.json();
+        setRegionTeams(d.teams || []);
+        setAllSubRegions(d.sub_regions || []);
+      }
+    } catch (e) {
+      setRegionalError(e.message || 'Failed to load regional data.');
+    } finally {
+      setRegionalLoading(false);
+    }
+  }
+
+  async function loadSubRegionsForRegion(regionId) {
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/sub-regions?regionId=${encodeURIComponent(regionId)}`, {
+        headers: { 'Content-Type': 'application/json', ...authH },
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setRegionSubRegions((prev) => ({ ...prev, [regionId]: d.sub_regions || [] }));
+        setAllSubRegions((prev) => {
+          const others = prev.filter((sr) => sr.region_id !== regionId);
+          return [...others, ...(d.sub_regions || [])];
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function createRegion() {
+    if (!newRegionName.trim()) return;
+    setNewRegionSaving(true); setRegionalMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/regions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ name: newRegionName.trim(), rvp_id: newRegionRvp || null }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setRegionalMsg({ type: 'error', text: json.error || 'Failed to create region.' }); return; }
+      setRegionalMsg({ type: 'success', text: `Region "${newRegionName.trim()}" created.` });
+      setNewRegionName(''); setNewRegionRvp('');
+      loadRegionalData();
+    } catch (e) { setRegionalMsg({ type: 'error', text: e.message }); }
+    finally { setNewRegionSaving(false); }
+  }
+
+  async function saveRegionEdit() {
+    if (!editingRegion || !editingRegion.name.trim()) return;
+    setEditRegionSaving(true); setRegionalMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/regions/${encodeURIComponent(editingRegion.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ name: editingRegion.name.trim(), rvp_id: editingRegion.rvp_id || null }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setRegionalMsg({ type: 'error', text: json.error || 'Failed to update region.' }); return; }
+      setEditingRegion(null);
+      loadRegionalData();
+    } catch (e) { setRegionalMsg({ type: 'error', text: e.message }); }
+    finally { setEditRegionSaving(false); }
+  }
+
+  async function deleteRegion(regionId) {
+    setConfirmDeleteRegion(null); setRegionalMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/regions/${encodeURIComponent(regionId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...authH },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setRegionalMsg({ type: 'error', text: json.error || 'Failed to delete region.' }); return; }
+      setRegionalMsg({ type: 'success', text: 'Region deleted.' });
+      loadRegionalData();
+    } catch (e) { setRegionalMsg({ type: 'error', text: e.message }); }
+  }
+
+  async function createSubRegion(regionId) {
+    if (!newSubRegionName.trim()) return;
+    setNewSubRegionSaving(true); setRegionalMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/sub-regions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ name: newSubRegionName.trim(), region_id: regionId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setRegionalMsg({ type: 'error', text: json.error || 'Failed to create sub-region.' }); return; }
+      setNewSubRegionName('');
+      loadSubRegionsForRegion(regionId);
+      setRegions((prev) => prev.map((r) => r.id === regionId ? { ...r, sub_region_count: (r.sub_region_count || 0) + 1 } : r));
+    } catch (e) { setRegionalMsg({ type: 'error', text: e.message }); }
+    finally { setNewSubRegionSaving(false); }
+  }
+
+  async function saveSubRegionEdit(subRegionId, regionId) {
+    if (!editingSubRegion || !editingSubRegion.name.trim()) return;
+    setEditSubRegionSaving(true);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/sub-regions/${encodeURIComponent(subRegionId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ name: editingSubRegion.name.trim() }),
+      });
+      if (!res.ok) return;
+      setEditingSubRegion(null);
+      loadSubRegionsForRegion(regionId);
+    } catch { /* ignore */ }
+    finally { setEditSubRegionSaving(false); }
+  }
+
+  async function deleteSubRegion(subRegionId, regionId) {
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/sub-regions/${encodeURIComponent(subRegionId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...authH },
+      });
+      if (res.ok) {
+        loadSubRegionsForRegion(regionId);
+        setRegions((prev) => prev.map((r) => r.id === regionId ? { ...r, sub_region_count: Math.max(0, (r.sub_region_count || 0) - 1) } : r));
+        setRegionTeams((prev) => prev.map((t) => t.sub_region_id === subRegionId ? { ...t, sub_region_id: null } : t));
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function setTeamRegion(teamId, regionId, subRegionId) {
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/teams/${encodeURIComponent(teamId)}/region`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ region_id: regionId || null, sub_region_id: subRegionId || null }),
+      });
+      if (res.ok) {
+        setRegionTeams((prev) => prev.map((t) => t.id === teamId
+          ? { ...t, region_id: regionId || null, sub_region_id: subRegionId || null }
+          : t
+        ));
+        // If region changed, clear sub-region from local state
+        if (!subRegionId) {
+          setRegionTeams((prev) => prev.map((t) => t.id === teamId ? { ...t, sub_region_id: null } : t));
+        }
+      }
+    } catch { /* ignore */ }
   }
 
   const loadCatalogue = useCallback(async () => {
@@ -1930,6 +2127,359 @@ export default function Admin() {
                   <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>Save an executive first</span>
                 )}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================
+          Regional Management
+          ================================================================ */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div className="card-header" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => {
+            if (!regionalOpen) { setRegionalOpen(true); loadRegionalData(); }
+            else setRegionalOpen(false);
+          }}>
+            <h2 className="card-title">Regional management</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{regionalOpen ? '▲ collapse' : '▼ configure'}</span>
+          </div>
+
+          {regionalOpen && (
+            <div className="card-body">
+              <p style={{ fontSize: '0.8375rem', color: '#64748b', margin: '0 0 16px' }}>
+                Organise teams into geo regions and assign RVPs (<strong>Senior Leader</strong> role) to each region.
+                Sub-regions provide finer grouping within a region (e.g. EMEA → UK &amp; Ireland).
+              </p>
+
+              {/* Tab selector */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '0' }}>
+                {[
+                  { key: 'regions', label: 'Regions & RVPs' },
+                  { key: 'teams', label: 'Team → Region Mapping' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setRegionalTab(key)}
+                    style={{
+                      padding: '7px 16px', border: 'none', cursor: 'pointer', fontSize: '0.8375rem', fontWeight: 600,
+                      background: 'none', borderBottom: regionalTab === key ? '2px solid #7c3aed' : '2px solid transparent',
+                      color: regionalTab === key ? '#7c3aed' : '#64748b', marginBottom: '-2px',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+
+              {regionalLoading && (
+                <div style={{ color: '#64748b', fontSize: '0.8375rem', padding: '12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="spinner" style={{ width: '14px', height: '14px' }} /> Loading…
+                </div>
+              )}
+
+              {regionalMsg && (
+                <div className={`alert ${regionalMsg.type === 'error' ? 'alert-error' : 'alert-success'}`} style={{ marginBottom: '12px' }}>
+                  {regionalMsg.text}
+                </div>
+              )}
+
+              {regionalError && (
+                <div className="alert alert-error" style={{ marginBottom: '12px' }}>{regionalError}</div>
+              )}
+
+              {/* ── Tab A: Regions & RVPs ─────────────────────────────── */}
+              {regionalTab === 'regions' && !regionalLoading && (
+                <div>
+                  {/* Regions table */}
+                  {regions.length > 0 && (
+                    <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            {['Region', 'RVP', 'Teams', 'Sub-regions', ''].map((h) => (
+                              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {regions.map((region) => (
+                            <>
+                              <tr key={region.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1e293b' }}>
+                                  {editingRegion?.id === region.id ? (
+                                    <input
+                                      className="form-input"
+                                      style={{ padding: '4px 8px', fontSize: '0.8125rem', width: '180px' }}
+                                      value={editingRegion.name}
+                                      onChange={(e) => setEditingRegion((p) => ({ ...p, name: e.target.value }))}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') saveRegionEdit(); if (e.key === 'Escape') setEditingRegion(null); }}
+                                      autoFocus
+                                    />
+                                  ) : region.name}
+                                </td>
+                                <td style={{ padding: '10px 12px' }}>
+                                  {editingRegion?.id === region.id ? (
+                                    <select
+                                      className="form-select"
+                                      style={{ fontSize: '0.8125rem', padding: '4px 8px' }}
+                                      value={editingRegion.rvp_id || ''}
+                                      onChange={(e) => setEditingRegion((p) => ({ ...p, rvp_id: e.target.value || null }))}
+                                    >
+                                      <option value="">— unassigned —</option>
+                                      {rvpCandidates.map((u) => (
+                                        <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    region.rvp
+                                      ? <span style={{ fontWeight: 500, color: '#4338ca' }}>{region.rvp.full_name || region.rvp.email}</span>
+                                      : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unassigned</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '10px 12px', color: '#64748b' }}>{region.team_count}</td>
+                                <td style={{ padding: '10px 12px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newExpanded = expandedSubRegion === region.id ? null : region.id;
+                                      setExpandedSubRegion(newExpanded);
+                                      if (newExpanded && !regionSubRegions[region.id]) loadSubRegionsForRegion(region.id);
+                                    }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed', fontWeight: 600, fontSize: '0.8125rem', padding: 0 }}
+                                  >
+                                    {region.sub_region_count} {expandedSubRegion === region.id ? '▲' : '▼'}
+                                  </button>
+                                </td>
+                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                  {editingRegion?.id === region.id ? (
+                                    <span style={{ display: 'flex', gap: '6px' }}>
+                                      <button type="button" className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={saveRegionEdit} disabled={editRegionSaving}>
+                                        {editRegionSaving ? '…' : 'Save'}
+                                      </button>
+                                      <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => setEditingRegion(null)}>Cancel</button>
+                                    </span>
+                                  ) : (
+                                    <span style={{ display: 'flex', gap: '6px' }}>
+                                      <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                                        onClick={() => setEditingRegion({ id: region.id, name: region.name, rvp_id: region.rvp_id })}>
+                                        Edit
+                                      </button>
+                                      {confirmDeleteRegion === region.id ? (
+                                        <span style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                          <span style={{ fontSize: '0.75rem', color: '#dc2626' }}>
+                                            {region.team_count > 0 ? `${region.team_count} team${region.team_count !== 1 ? 's' : ''} will be unassigned. ` : ''}
+                                            Delete?
+                                          </span>
+                                          <button type="button" className="btn btn-danger" style={{ padding: '3px 8px', fontSize: '0.72rem' }} onClick={() => deleteRegion(region.id)}>Yes</button>
+                                          <button type="button" className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: '0.72rem' }} onClick={() => setConfirmDeleteRegion(null)}>No</button>
+                                        </span>
+                                      ) : (
+                                        <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem', color: '#dc2626' }}
+                                          onClick={() => setConfirmDeleteRegion(region.id)}>
+                                          Delete
+                                        </button>
+                                      )}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                              {/* Sub-region expand panel */}
+                              {expandedSubRegion === region.id && (
+                                <tr key={`${region.id}-sub`}>
+                                  <td colSpan={5} style={{ padding: '0 12px 12px 28px', background: '#fafafa', borderBottom: '1px solid #e2e8f0' }}>
+                                    <div style={{ paddingTop: '10px' }}>
+                                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                                        Sub-regions of {region.name}
+                                      </div>
+                                      {(regionSubRegions[region.id] || []).map((sr) => (
+                                        <div key={sr.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                          {editingSubRegion?.id === sr.id ? (
+                                            <>
+                                              <input
+                                                className="form-input"
+                                                style={{ padding: '3px 8px', fontSize: '0.8rem', width: '200px' }}
+                                                value={editingSubRegion.name}
+                                                onChange={(e) => setEditingSubRegion((p) => ({ ...p, name: e.target.value }))}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') saveSubRegionEdit(sr.id, region.id); if (e.key === 'Escape') setEditingSubRegion(null); }}
+                                                autoFocus
+                                              />
+                                              <button type="button" className="btn btn-primary" style={{ padding: '3px 10px', fontSize: '0.75rem' }}
+                                                onClick={() => saveSubRegionEdit(sr.id, region.id)} disabled={editSubRegionSaving}>
+                                                {editSubRegionSaving ? '…' : 'Save'}
+                                              </button>
+                                              <button type="button" className="btn btn-ghost" style={{ padding: '3px 10px', fontSize: '0.75rem' }} onClick={() => setEditingSubRegion(null)}>Cancel</button>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span style={{ fontSize: '0.8125rem', color: '#374151', minWidth: '160px' }}>• {sr.name}</span>
+                                              <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                                                onClick={() => setEditingSubRegion({ id: sr.id, name: sr.name })}>Rename</button>
+                                              <button type="button" className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: '0.72rem', color: '#dc2626' }}
+                                                onClick={() => deleteSubRegion(sr.id, region.id)}>Delete</button>
+                                            </>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {/* Add sub-region */}
+                                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
+                                        <input
+                                          className="form-input"
+                                          style={{ padding: '4px 10px', fontSize: '0.8rem', width: '200px' }}
+                                          placeholder="New sub-region name…"
+                                          value={newSubRegionName}
+                                          onChange={(e) => setNewSubRegionName(e.target.value)}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') createSubRegion(region.id); }}
+                                        />
+                                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                          onClick={() => createSubRegion(region.id)} disabled={newSubRegionSaving || !newSubRegionName.trim()}>
+                                          {newSubRegionSaving ? 'Adding…' : '+ Add'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {regions.length === 0 && !regionalLoading && (
+                    <p style={{ color: '#94a3b8', fontSize: '0.8375rem', margin: '0 0 16px' }}>No regions defined yet. Add one below.</p>
+                  )}
+
+                  {/* Add region form */}
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#374151', marginBottom: '10px' }}>Add region</div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <div className="form-group" style={{ flex: '1 1 200px' }}>
+                        <label className="form-label">Region name</label>
+                        <input
+                          className="form-input"
+                          placeholder="e.g. EMEA"
+                          value={newRegionName}
+                          onChange={(e) => setNewRegionName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') createRegion(); }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ flex: '1 1 220px' }}>
+                        <label className="form-label">RVP (Senior Leader)</label>
+                        <select className="form-select" value={newRegionRvp} onChange={(e) => setNewRegionRvp(e.target.value)}>
+                          <option value="">— unassigned —</option>
+                          {rvpCandidates.map((u) => (
+                            <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button" className="btn btn-primary"
+                        style={{ whiteSpace: 'nowrap', alignSelf: 'flex-end', marginBottom: '1px' }}
+                        onClick={createRegion}
+                        disabled={newRegionSaving || !newRegionName.trim()}
+                      >
+                        {newRegionSaving ? 'Adding…' : 'Add region'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Tab B: Team → Region Mapping ─────────────────────── */}
+              {regionalTab === 'teams' && !regionalLoading && (() => {
+                const unassignedTeams = regionTeams.filter((t) => !t.region_id);
+                const assignedTeams   = regionTeams.filter((t) =>  t.region_id);
+                const groupedByRegion = {};
+                for (const r of regions) groupedByRegion[r.id] = { region: r, teams: [] };
+                for (const t of assignedTeams) {
+                  if (groupedByRegion[t.region_id]) groupedByRegion[t.region_id].teams.push(t);
+                }
+                const TeamRow = ({ team }) => {
+                  const subOptions = allSubRegions.filter((sr) => sr.region_id === team.region_id);
+                  return (
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '8px 12px', fontSize: '0.8125rem', fontWeight: 500, color: '#1e293b' }}>
+                        {team.name}
+                      </td>
+                      <td style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#64748b' }}>
+                        {team.manager?.full_name || team.manager?.email || '—'}
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <select
+                          className="form-select"
+                          style={{ fontSize: '0.8rem', padding: '3px 8px' }}
+                          value={team.region_id || ''}
+                          onChange={(e) => setTeamRegion(team.id, e.target.value || null, null)}
+                        >
+                          <option value="">— unassigned —</option>
+                          {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: '8px 12px' }}>
+                        {team.region_id && subOptions.length > 0 ? (
+                          <select
+                            className="form-select"
+                            style={{ fontSize: '0.8rem', padding: '3px 8px' }}
+                            value={team.sub_region_id || ''}
+                            onChange={(e) => setTeamRegion(team.id, team.region_id, e.target.value || null)}
+                          >
+                            <option value="">— none —</option>
+                            {subOptions.map((sr) => <option key={sr.id} value={sr.id}>{sr.name}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                };
+                return (
+                  <div>
+                    <p style={{ fontSize: '0.8125rem', color: '#64748b', marginTop: 0, marginBottom: '16px' }}>
+                      Assign each team to a region and optional sub-region. Changes save immediately.
+                    </p>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            {['Team', 'Manager', 'Region', 'Sub-region'].map((h) => (
+                              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Grouped by region */}
+                          {Object.values(groupedByRegion).map(({ region, teams: rTeams }) => rTeams.length === 0 ? null : (
+                            <>
+                              <tr key={`hdr-${region.id}`}>
+                                <td colSpan={4} style={{ padding: '10px 12px 4px', background: '#f1f5f9', fontSize: '0.75rem', fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                  {region.name}{region.rvp ? ` — RVP: ${region.rvp.full_name || region.rvp.email}` : ''}
+                                </td>
+                              </tr>
+                              {rTeams.map((t) => <TeamRow key={t.id} team={t} />)}
+                            </>
+                          ))}
+                          {/* Unassigned teams */}
+                          {unassignedTeams.length > 0 && (
+                            <>
+                              <tr>
+                                <td colSpan={4} style={{ padding: '10px 12px 4px', background: '#fef2f2', fontSize: '0.75rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                  Unassigned ({unassignedTeams.length})
+                                </td>
+                              </tr>
+                              {unassignedTeams.map((t) => <TeamRow key={t.id} team={t} />)}
+                            </>
+                          )}
+                          {regionTeams.length === 0 && (
+                            <tr><td colSpan={4} style={{ padding: '16px 12px', color: '#94a3b8', fontSize: '0.8125rem' }}>No teams found.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

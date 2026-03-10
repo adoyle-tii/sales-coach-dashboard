@@ -100,6 +100,12 @@ export default function Team() {
   const [meetingIntel, setMeetingIntel] = useState(null);
   const [authToken, setAuthToken]       = useState(null);
 
+  // Region filter (hierarchy view only — executive/senior_leader)
+  const [regionFilterId, setRegionFilterId]     = useState('');
+  const [availableRegions, setAvailableRegions] = useState([]);
+  // team_id → region_id map built from Supabase teams table
+  const [teamRegionMap, setTeamRegionMap]       = useState({});
+
   const handleSort = useCallback((col) => {
     setSortCol((prev) => {
       if (prev === col) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); return col; }
@@ -145,6 +151,27 @@ export default function Team() {
             .select('id, full_name, email, role, sub_role, team_id')
             .eq('reports_to', effectiveUserId)
             .eq('status', 'active');
+
+          // Load regions and team→region map for the region filter (non-blocking)
+          if (!viewAsId) {
+            (async () => {
+              try {
+                const regRes = await fetch(`${WORKER_URL}/regions/mine`, {
+                  headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                });
+                if (regRes.ok) {
+                  const rd = await regRes.json();
+                  setAvailableRegions(rd.regions || []);
+                }
+                const { data: teamsData } = await supabase.from('teams').select('id, region_id');
+                if (teamsData) {
+                  const map = {};
+                  for (const t of teamsData) if (t.region_id) map[t.id] = t.region_id;
+                  setTeamRegionMap(map);
+                }
+              } catch { /* non-critical */ }
+            })();
+          }
           const reportList = (reports ?? []).filter((u) => !['superadmin','admin'].includes(u.role));
           setDirectReports(reportList);
 
@@ -403,6 +430,11 @@ export default function Team() {
 
     const tierLabel = myRole === 'executive' ? 'Senior Leaders' : myRole === 'senior_leader' ? 'Leaders / Managers' : 'Managers';
 
+    // Apply region filter to directReports list (only when at top level, not drilled-in)
+    const filteredDirectReports = (regionFilterId && !viewAsId)
+      ? directReports.filter((r) => r.team_id && teamRegionMap[r.team_id] === regionFilterId)
+      : directReports;
+
     return (
       <div>
         <div className="page-header">
@@ -417,11 +449,31 @@ export default function Team() {
           </p>
         </div>
 
+        {/* Region filter — only shown at top level with regions available */}
+        {!viewAsId && availableRegions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>Filter by region:</span>
+            <select
+              className="form-select"
+              style={{ minWidth: '160px', fontSize: '0.8375rem' }}
+              value={regionFilterId}
+              onChange={(e) => setRegionFilterId(e.target.value)}
+            >
+              <option value="">All regions</option>
+              {availableRegions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            {regionFilterId && (
+              <button type="button" className="btn btn-ghost" style={{ fontSize: '0.8rem', padding: '4px 10px' }}
+                onClick={() => setRegionFilterId('')}>Clear</button>
+            )}
+          </div>
+        )}
+
         {/* Top-level stats */}
         <div className="stats-grid" style={{ marginBottom: '24px' }}>
           <div className="stat-card">
-            <div className="stat-value">{directReports.length}</div>
-            <div className="stat-label">Direct reports</div>
+            <div className="stat-value">{filteredDirectReports.length}</div>
+            <div className="stat-label">{regionFilterId ? 'Filtered direct reports' : 'Direct reports'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#7c3aed' }}>{totalReps}</div>
@@ -505,8 +557,8 @@ export default function Team() {
 
         {/* Direct reports breakdown — split reps (flat table) from managers/leaders (cards) */}
         {(() => {
-          const directRepReports = directReports.filter((r) => r.role === 'rep');
-          const teamReports = directReports.filter((r) => r.role !== 'rep');
+          const directRepReports = filteredDirectReports.filter((r) => r.role === 'rep');
+          const teamReports = filteredDirectReports.filter((r) => r.role !== 'rep');
           const fromPath = viewAsId ? `/team/view/${viewAsId}` : '/team';
           const fromLabel = viewAsId ? `${effectiveProfile?.full_name || 'Team'}'s overview` : 'Org overview';
 
@@ -548,10 +600,13 @@ export default function Team() {
 
           return (
             <>
-              {directReports.length === 0 && (
+              {filteredDirectReports.length === 0 && (
                 <div className="card" style={{ marginBottom: '24px' }}>
                   <div className="card-body">
-                    <div className="empty-state"><div className="empty-icon">👥</div><div>No direct reports found.</div></div>
+                    <div className="empty-state">
+                      <div className="empty-icon">👥</div>
+                      <div>{regionFilterId ? 'No direct reports in this region.' : 'No direct reports found.'}</div>
+                    </div>
                   </div>
                 </div>
               )}

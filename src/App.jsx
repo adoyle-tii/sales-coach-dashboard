@@ -10,6 +10,7 @@ import CourseBreakdown from './pages/CourseBreakdown';
 import Admin from './pages/Admin';
 import AssessmentDetail from './pages/AssessmentDetail';
 import CoachingSessionDetail from './pages/CoachingSessionDetail';
+import RegionalDashboard from './pages/RegionalDashboard';
 import Layout from './components/Layout';
 
 export default function App() {
@@ -145,6 +146,7 @@ export default function App() {
           <Route path="team/:userId/assessment/:id" element={<AssessmentDetail />} />
           <Route path="team/:userId/session/:id" element={<CoachingSessionDetail />} />
           <Route path="admin" element={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? <Admin /> : <Navigate to="/" replace />} />
+          <Route path="regional" element={['senior_leader', 'leader', 'executive', 'admin', 'superadmin'].includes(profile?.role) ? <RegionalDashboard /> : <Navigate to="/" replace />} />
           <Route index element={<Navigate to={profile?.role === 'superadmin' || (profile?.role === 'admin' && profile?.can_impersonate) ? '/admin' : ['manager', 'leader', 'senior_leader', 'executive'].includes(profile?.role) ? '/team' : '/my'} replace />} />
         </Route>
         <Route path="/login" element={<Navigate to="/" replace />} />

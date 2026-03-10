@@ -15,6 +15,7 @@ export default function Layout({ user, profile, onSignOut }) {
   const navProfile = isImpersonating ? displayProfile : realProfile;
   const isAdmin = !isImpersonating && (realProfile?.role === 'superadmin' || (realProfile?.role === 'admin' && realProfile?.can_impersonate));
   const isManager = ['manager', 'leader', 'senior_leader', 'executive', 'admin', 'superadmin'].includes(navProfile?.role);
+  const isRegional = ['senior_leader', 'leader', 'executive', 'admin', 'superadmin'].includes(navProfile?.role);
 
   const active = (path) => location.pathname.startsWith(path) ? 'active' : '';
 
@@ -36,6 +37,11 @@ export default function Layout({ user, profile, onSignOut }) {
           {isManager && (
             <Link to="/team" className={active('/team')}>
               <span className="nav-icon">👥</span> Team
+            </Link>
+          )}
+          {isRegional && (
+            <Link to="/regional" className={active('/regional')}>
+              <span className="nav-icon">🌍</span> {navProfile?.role === 'senior_leader' ? 'My Region' : 'Regional View'}
             </Link>
           )}
           {isAdmin && (
