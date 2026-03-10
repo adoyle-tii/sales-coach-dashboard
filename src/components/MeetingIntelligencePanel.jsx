@@ -17,7 +17,7 @@ function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride }) {
           title={`${data[i].month}: ${v}`}
           style={{
             flex: 1,
-            background: i === values.length - 1 ? color : `${color}66`,
+            background: i === 0 ? color : `${color}66`,
             height: `${Math.max(4, Math.round((v / max) * 32))}px`,
             borderRadius: '2px 2px 0 0',
             transition: 'height 0.3s',
@@ -98,9 +98,9 @@ function OrgMeetingIntelligence({ token }) {
   // Most recent month stats (for sparkline labels / talk ratio)
   const lastRate  = data.active_rep_rate_by_month?.[data.active_rep_rate_by_month.length - 1];
   const lastTalk  = data.avg_talk_ratio_by_month?.[data.avg_talk_ratio_by_month.length - 1];
-  const recentMonths = (data.meetings_by_month || []).slice(-6);
-  const recentRates  = (data.active_rep_rate_by_month || []).slice(-6);
-  const recentTalk   = (data.avg_talk_ratio_by_month || []).slice(-6);
+  const recentMonths = (data.meetings_by_month || []).slice(-6).reverse();
+  const recentRates  = (data.active_rep_rate_by_month || []).slice(-6).reverse();
+  const recentTalk   = (data.avg_talk_ratio_by_month || []).slice(-6).reverse();
 
   // MTD: this month vs same calendar day last month
   const mtdThis = data.mtd_this_month ?? null;
