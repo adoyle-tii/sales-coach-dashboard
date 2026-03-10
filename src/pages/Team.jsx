@@ -124,10 +124,13 @@ export default function Team() {
         const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
         setAuthToken(token || null);
 
-        // Fetch meeting intelligence in parallel with everything else
+        // Fetch meeting intelligence in parallel with everything else.
+        // - Top-level org view (isHierarchy, no viewAsId) → org endpoint (org-wide stats)
+        // - Drilling into a sub-leader's org (isHierarchy + viewAsId) → team endpoint for that person
+        // - Manager view → team endpoint for the manager
         (async () => {
           try {
-            const miUrl = isHierarchy
+            const miUrl = (isHierarchy && !viewAsId)
               ? `${WORKER_URL}/hs/meeting-intelligence/org?months=12`
               : `${WORKER_URL}/hs/meeting-intelligence/team/${encodeURIComponent(effectiveUserId)}?months=6`;
             const miRes = await fetch(miUrl, { headers: authHeaders });
@@ -426,8 +429,11 @@ export default function Team() {
           </div>
         </div>
 
-        {/* Meeting Intelligence — org-wide summary for CRO / executives */}
-        <MeetingIntelligencePanel mode="org" token={authToken} />
+        {/* Meeting Intelligence — org-wide at top level, team-scoped when drilled in */}
+        {viewAsId
+          ? (meetingIntel && <TeamMeetingIntelligenceSummary teamIntel={meetingIntel} />)
+          : <MeetingIntelligencePanel mode="org" token={authToken} />
+        }
 
         {/* Overall course completion rollup */}
         {teamCoursesError && (
