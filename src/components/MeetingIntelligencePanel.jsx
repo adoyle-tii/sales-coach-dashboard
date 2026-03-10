@@ -239,7 +239,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
         <span style={{ fontSize: '0.8rem', color: '#64748b' }}>this month vs last month</span>
       </div>
       <div className="card-body">
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#7c3aed' }}>{s.meetings_this_month}</div>
             <div className="stat-label">
@@ -276,6 +276,30 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
             </div>
           </div>
         </div>
+
+        {/* Yearly total + quarterly breakdown */}
+        {(s.meetings_this_year != null || s.meetings_by_quarter?.length > 0) && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '16px', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ paddingRight: '16px', borderRight: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
+                {s.meetings_this_year?.toLocaleString() ?? '—'}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                Total meetings {s.report_year ?? new Date().getFullYear()}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              {(s.meetings_by_quarter || []).map((q) => (
+                <div key={q.quarter} style={{ minWidth: '60px' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: q.count > 0 ? '#1e293b' : '#cbd5e1' }}>
+                    {q.count > 0 ? q.count.toLocaleString() : '—'}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{q.quarter}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
