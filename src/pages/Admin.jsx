@@ -114,6 +114,23 @@ export default function Admin() {
   const [mappingSaving, setMappingSaving] = useState(false);
   const SUB_ROLES_WITH_SE = [...SUB_ROLES, { value: 'se', label: 'SE' }];
 
+  // Meeting Intelligence scraper monitor state
+  const [scraperOpen, setScraperOpen]                   = useState(false);
+  const [scraperStatus, setScraperStatus]               = useState(null);   // { counts, failures, last_scraped_at }
+  const [scraperStatusLoading, setScraperStatusLoading] = useState(false);
+  const [scraperStatusError, setScraperStatusError]     = useState(null);
+  const [resettingFailed, setResettingFailed]           = useState(false);
+  const [resetMsg, setResetMsg]                         = useState(null);
+  const [scraperAutoRefresh, setScraperAutoRefresh]     = useState(false);
+
+  // Meeting Intelligence ingest state
+  const [meetingIngestOpen, setMeetingIngestOpen]       = useState(false);
+  const [meetingIngestLoading, setMeetingIngestLoading] = useState(false);
+  const [meetingIngestError, setMeetingIngestError]     = useState(null);
+  const [meetingIngestSuccess, setMeetingIngestSuccess] = useState(null);
+  const [meetingCsvFiles, setMeetingCsvFiles]           = useState({});
+  const [meetingIngestStats, setMeetingIngestStats]     = useState(null);
+
   useEffect(() => { supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id)); }, []);
   useEffect(() => { load(); }, []);
 
@@ -671,6 +688,120 @@ export default function Admin() {
       setIngestError(e.message || 'Ingest failed.');
     } finally {
       setIngestLoading(false);
+    }
+  }
+
+  async function loadScraperStatus() {
+    setScraperStatusLoading(true); setScraperStatusError(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/meetings/scrape-status`, {
+        headers: { 'Content-Type': 'application/json', ...authH },
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setScraperStatusError(j.error || 'Failed to load scraper status.'); return; }
+      setScraperStatus(await res.json());
+    } catch (e) { setScraperStatusError(e.message || 'Network error.'); }
+    finally { setScraperStatusLoading(false); }
+  }
+
+  async function resetFailed(meetingIds) {
+    setResettingFailed(true); setResetMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const body = meetingIds ? { meeting_ids: meetingIds } : {};
+      const res = await fetch(`${WORKER_URL}/admin/meetings/reset-failed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setResetMsg({ type: 'error', text: j.error || 'Reset failed.' }); return; }
+      setResetMsg({ type: 'success', text: meetingIds ? `Reset ${meetingIds.length} meeting(s) to pending.` : `Reset ${j.reset ?? 'all'} failed meetings to pending.` });
+      await loadScraperStatus();
+    } catch (e) { setResetMsg({ type: 'error', text: e.message }); }
+    finally { setResettingFailed(false); }
+  }
+
+  // Auto-refresh scraper status every 30s when panel is open and toggle is on
+  useEffect(() => {
+    if (!scraperOpen || !scraperAutoRefresh) return;
+    const interval = setInterval(loadScraperStatus, 30_000);
+    return () => clearInterval(interval);
+  }, [scraperOpen, scraperAutoRefresh]);
+
+  function onMeetingCsvFile(key, file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setMeetingCsvFiles((prev) => ({ ...prev, [key]: e.target.result }));
+    reader.readAsText(file);
+  }
+
+  async function triggerMeetingIngest() {
+    setMeetingIngestLoading(true);
+    setMeetingIngestError(null);
+    setMeetingIngestSuccess(null);
+    setMeetingIngestStats(null);
+    try {
+      const authH = await getAuthHeaders();
+      const setProgress = (msg) => setMeetingIngestSuccess(msg);
+
+      // Upload meetings CSV
+      if (meetingCsvFiles.meetings) {
+        const rows = parseCsvBrowser(meetingCsvFiles.meetings).map((r) => ({
+          id:                 r.id                 || null,
+          calendar_event_id:  r.calendar_event_id  || null,
+          conference_call_id: r.conference_call_id || null,
+          created_at:         r.created_at         || null,
+          domain_id:          r.domain_id          || null,
+          meeting_source_id:  r.meeting_source_id  || null,
+          meeting_type:       r.meeting_type        || null,
+          updated_at:         r.updated_at          || null,
+        })).filter((r) => r.id);
+        await truncateAndInsert('hs_raw_meetings', rows, 'engagement_meetings.csv', setProgress);
+      }
+
+      // Upload meeting attendees CSV
+      if (meetingCsvFiles.meeting_attendees) {
+        const rows = parseCsvBrowser(meetingCsvFiles.meeting_attendees).map((r) => ({
+          id:                         r.id                         || null,
+          created_at:                 r.created_at                 || null,
+          domain_id:                  r.domain_id                  || null,
+          email:                      r.email                      || null,
+          icm_person_id:              r.icm_person_id              || null,
+          is_conference_call_host:    r.is_conference_call_host    || null,
+          meeting_attendee_source_id: r.meeting_attendee_source_id || null,
+          meeting_id:                 r.meeting_id                 || null,
+          updated_at:                 r.updated_at                 || null,
+          user_id:                    r.user_id                    || null,
+        })).filter((r) => r.id);
+        await truncateAndInsert('hs_raw_meeting_attendees', rows, 'engagement_meeting_attendees.csv', setProgress);
+      }
+
+      // Finalize — run the RPC that promotes staging → production
+      setProgress('Finalising meeting data…');
+      const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_meetings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({}),
+      });
+      const finalJson = await finalRes.json().catch(() => ({}));
+      if (!finalRes.ok) {
+        setMeetingIngestError(`Finalize failed: ${finalJson.error || finalRes.status}`);
+        return;
+      }
+
+      const s = finalJson.stats || {};
+      setMeetingIngestStats(s);
+      setMeetingIngestSuccess(
+        `Import complete — ${s.meetings?.toLocaleString() ?? 0} meetings imported, ` +
+        `${s.attendees?.toLocaleString() ?? 0} attendees linked` +
+        (s.skipped_meetings > 0 ? `, ${s.skipped_meetings} skipped (no conference call ID or not external)` : '') +
+        `. Ready to scrape.`
+      );
+    } catch (e) {
+      setMeetingIngestError(e.message || 'Meeting import failed.');
+    } finally {
+      setMeetingIngestLoading(false);
     }
   }
 
@@ -1758,6 +1889,350 @@ export default function Admin() {
                 {!hierarchyConfig?.executive_id && (
                   <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>Save an executive first</span>
                 )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================
+          Meeting Intelligence — Scraper Monitor
+          ================================================================ */}
+      {isSuperadmin && (() => {
+        const counts = scraperStatus?.counts || {};
+        const total = counts.total || 0;
+        const completed = counts.completed || 0;
+        const failed = counts.failed || 0;
+        const inProgress = counts.in_progress || 0;
+        const pending = counts.pending || 0;
+        const skipped = counts.skipped || 0;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const failures = scraperStatus?.failures || [];
+
+        return (
+          <div className="card section">
+            <div
+              className="card-header"
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => {
+                if (!scraperOpen) { setScraperOpen(true); loadScraperStatus(); }
+                else setScraperOpen(false);
+              }}
+            >
+              <h2 className="card-title">Meeting Intelligence — Scraper Monitor</h2>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                {scraperOpen ? '▲ collapse' : `▼ Monitor scraping progress${total > 0 ? ` — ${completed.toLocaleString()}/${total.toLocaleString()} scraped` : ''}`}
+              </span>
+            </div>
+
+            {scraperOpen && (
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                {/* Toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button" className="btn btn-ghost"
+                    style={{ fontSize: '0.8125rem', padding: '5px 12px' }}
+                    onClick={loadScraperStatus}
+                    disabled={scraperStatusLoading}
+                  >
+                    {scraperStatusLoading ? 'Refreshing…' : '↻ Refresh'}
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8125rem', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={scraperAutoRefresh}
+                      onChange={(e) => setScraperAutoRefresh(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Auto-refresh every 30s
+                  </label>
+                  {scraperStatus?.last_scraped_at && (
+                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }}>
+                      Last activity: {new Date(scraperStatus.last_scraped_at).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+
+                {scraperStatusError && (
+                  <div className="alert alert-error">{scraperStatusError}</div>
+                )}
+
+                {/* Progress stats */}
+                {total > 0 && (
+                  <div>
+                    {/* Count chips */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                      {[
+                        { label: 'Total meetings',  value: total,       color: '#1e293b', bg: '#f8fafc' },
+                        { label: 'Completed',        value: completed,   color: '#15803d', bg: '#f0fdf4' },
+                        { label: 'Pending',          value: pending,     color: '#1d4ed8', bg: '#eff6ff' },
+                        { label: 'In progress',      value: inProgress,  color: '#b45309', bg: '#fef9c3' },
+                        { label: 'Failed',           value: failed,      color: '#dc2626', bg: '#fef2f2' },
+                        { label: 'Skipped',          value: skipped,     color: '#64748b', bg: '#f1f5f9' },
+                      ].map(({ label, value, color, bg }) => value > 0 || label === 'Total meetings' ? (
+                        <div key={label} className="stat-card" style={{ background: bg, border: `1px solid ${color}22` }}>
+                          <div className="stat-value" style={{ color, fontSize: '1.375rem' }}>{value.toLocaleString()}</div>
+                          <div className="stat-label">{label}</div>
+                        </div>
+                      ) : null)}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div style={{ marginBottom: '4px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', color: '#475569' }}>
+                      <span>Scrape progress</span>
+                      <span style={{ fontWeight: 600 }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: '10px', borderRadius: '999px', background: '#e2e8f0', overflow: 'hidden', position: 'relative' }}>
+                      {/* completed */}
+                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: '#16a34a', borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                      {/* failed overlay */}
+                      {failed > 0 && total > 0 && (
+                        <div style={{ position: 'absolute', left: `${pct}%`, top: 0, height: '100%', width: `${Math.round((failed / total) * 100)}%`, background: '#fca5a5' }} />
+                      )}
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                      {completed.toLocaleString()} of {(total - skipped).toLocaleString()} scrapeable meetings completed
+                      {skipped > 0 && ` (${skipped.toLocaleString()} skipped)`}
+                    </div>
+                  </div>
+                )}
+
+                {total === 0 && !scraperStatusLoading && (
+                  <div className="empty-state" style={{ padding: '20px' }}>
+                    <div className="empty-icon">📋</div>
+                    <div>No meetings imported yet. Use the Meeting Intelligence import section below to upload your CSV files first.</div>
+                  </div>
+                )}
+
+                {/* Failed meetings table */}
+                {failures.length > 0 && (
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                      <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: '#dc2626' }}>
+                        Failed meetings ({failed.toLocaleString()})
+                      </h3>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ fontSize: '0.8125rem', padding: '5px 14px' }}
+                        onClick={() => resetFailed(null)}
+                        disabled={resettingFailed}
+                      >
+                        {resettingFailed ? 'Resetting…' : `Reset all ${failed.toLocaleString()} to pending`}
+                      </button>
+                    </div>
+
+                    {resetMsg && (
+                      <div className={`alert ${resetMsg.type === 'error' ? 'alert-error' : 'alert-success'}`} style={{ marginBottom: '12px' }}>
+                        {resetMsg.text}
+                      </div>
+                    )}
+
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="data-table" style={{ fontSize: '0.8125rem' }}>
+                        <thead>
+                          <tr>
+                            <th>Meeting ID</th>
+                            <th>Failed at</th>
+                            <th>Error</th>
+                            <th style={{ width: '100px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {failures.map((f) => (
+                            <tr key={f.hs_meeting_id}>
+                              <td>
+                                <a
+                                  href={`https://turnitin.highspot.com/engagement#meetings/${f.hs_meeting_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#2563eb' }}
+                                >
+                                  {f.hs_meeting_id}
+                                </a>
+                              </td>
+                              <td style={{ color: '#64748b', whiteSpace: 'nowrap' }}>
+                                {f.scraped_at ? new Date(f.scraped_at).toLocaleString() : '—'}
+                              </td>
+                              <td style={{ color: '#dc2626', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.scrape_error}>
+                                {f.scrape_error || '—'}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-xs"
+                                  style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                                  disabled={resettingFailed}
+                                  onClick={() => resetFailed([f.hs_meeting_id])}
+                                >
+                                  Reset
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {failed > failures.length && (
+                        <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          Showing most recent {failures.length} of {failed.toLocaleString()} failures. Use "Reset all" to requeue them.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scraper setup guide */}
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600 }}>Scraper setup & commands</h3>
+                  <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: '#64748b' }}>
+                    The scraper runs as a local Node.js process on your machine. Run these commands once to set it up, then re-run <code>npm run scrape</code> as needed. Progress updates here in real time.
+                  </p>
+
+                  {[
+                    {
+                      step: '1',
+                      label: 'One-time setup (run in Terminal)',
+                      code: `cd "${window.location.origin.includes('localhost') ? '~/path/to/' : ''}sales-coach-extension/scraper"\nnpm install\nnpx playwright install chromium`,
+                    },
+                    {
+                      step: '2',
+                      label: 'Configure .env (first time only)',
+                      code: `cp .env.example .env\n# Then edit .env — set SUPABASE_SUPERADMIN_JWT to your superadmin access_token\n# (sign in to dashboard → DevTools → Application → Local Storage → access_token)`,
+                    },
+                    {
+                      step: '3',
+                      label: 'Authenticate with Highspot (once per session)',
+                      code: 'npm run login\n# A Chrome window opens — sign in with your @turnitin.com Google account\n# Close the browser once you reach the Highspot dashboard',
+                    },
+                    {
+                      step: '4',
+                      label: 'Test on a single meeting (optional but recommended)',
+                      code: 'node index.js discover 486262\n# Replace 486262 with any valid meeting ID from your CSV\n# Saves rendered HTML files for selector verification',
+                    },
+                    {
+                      step: '5',
+                      label: 'Run the scraper (repeat as needed)',
+                      code: 'npm run scrape\n# Scrapes 50 meetings per run, resumes automatically\n# Re-run until all pending meetings are completed',
+                    },
+                  ].map(({ step, label, code }) => (
+                    <div key={step} style={{ marginBottom: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                      <div style={{ background: '#f8fafc', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, color: '#475569', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ background: '#e2e8f0', borderRadius: '999px', width: '18px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#1e293b', flexShrink: 0 }}>{step}</span>
+                        {label}
+                        <button
+                          type="button"
+                          style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#64748b', padding: '2px 6px' }}
+                          onClick={() => navigator.clipboard.writeText(code).catch(() => {})}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre style={{ margin: 0, padding: '10px 14px', fontSize: '0.8rem', color: '#1e293b', background: '#fff', overflowX: 'auto', lineHeight: 1.5 }}>{code}</pre>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ================================================================
+          Meeting Intelligence ingest (engagement_meetings.csv +
+          engagement_meeting_attendees.csv from Highspot Data Lake)
+          ================================================================ */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div
+            className="card-header"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setMeetingIngestOpen((v) => !v)}
+          >
+            <h2 className="card-title">Meeting Intelligence import</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {meetingIngestOpen ? '▲ collapse' : '▼ Import Highspot meeting data for scraping ▼'}
+            </span>
+          </div>
+
+          {meetingIngestOpen && (
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
+                Upload the two CSV exports from your Highspot Data Lake.
+                Only <strong>external meetings with a conference call recording</strong> will be imported (~6,351 of ~10,697 total).
+                After import, run the scraper to collect transcripts, talk ratios, and delivery insights.
+              </p>
+
+              {/* How-to steps */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px 16px', fontSize: '0.8125rem', color: '#475569' }}>
+                <div style={{ fontWeight: 600, marginBottom: '8px', color: '#1e293b' }}>Steps</div>
+                <ol style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <li>Download <code>engagement_meetings.csv</code> and <code>engagement_meeting_attendees.csv</code> from your Highspot Data Lake export.</li>
+                  <li>Select both files below and click <strong>Run import</strong>.</li>
+                  <li>Once complete, follow the scraper setup instructions to collect meeting content.</li>
+                </ol>
+              </div>
+
+              {/* Last import stats */}
+              {meetingIngestStats && (
+                <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.8125rem', color: '#166534' }}>
+                  Last import: {meetingIngestStats.meetings?.toLocaleString()} meetings · {meetingIngestStats.attendees?.toLocaleString()} attendees
+                  {meetingIngestStats.skipped_meetings > 0 && (
+                    <span style={{ color: '#92400e', marginLeft: '8px' }}>· {meetingIngestStats.skipped_meetings} skipped</span>
+                  )}
+                </div>
+              )}
+
+              {/* File pickers */}
+              {[
+                {
+                  key: 'meetings',
+                  label: 'engagement_meetings.csv',
+                  hint: 'Columns: calendar_event_id, conference_call_id, created_at, domain_id, id, meeting_source_id, meeting_type, updated_at',
+                },
+                {
+                  key: 'meeting_attendees',
+                  label: 'engagement_meeting_attendees.csv',
+                  hint: 'Columns: created_at, domain_id, email, icm_person_id, id, is_conference_call_host, meeting_attendee_source_id, meeting_id, updated_at, user_id',
+                },
+              ].map(({ key, label, hint }) => (
+                <div key={key} className="form-group">
+                  <label className="form-label">{label}</label>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '6px' }}>{hint}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      style={{ fontSize: '0.8125rem' }}
+                      onChange={(e) => onMeetingCsvFile(key, e.target.files?.[0])}
+                    />
+                    {meetingCsvFiles[key] && (
+                      <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>✓ loaded</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {meetingIngestError && (
+                <div className="alert alert-error">{meetingIngestError}</div>
+              )}
+              {meetingIngestSuccess && !meetingIngestError && (
+                <div className="alert alert-success">{meetingIngestSuccess}</div>
+              )}
+
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={triggerMeetingIngest}
+                  disabled={meetingIngestLoading || Object.keys(meetingCsvFiles).length === 0}
+                >
+                  {meetingIngestLoading ? 'Importing…' : 'Run import'}
+                </button>
+                <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  Large files may take 1–2 minutes
+                </span>
               </div>
             </div>
           )}

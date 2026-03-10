@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar, scoreColor } from '../components/SpiderChart';
+import MeetingIntelligencePanel, { TeamMeetingIntelligenceSummary, TalkPctBadge, talkRatioColor } from '../components/MeetingIntelligencePanel';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
@@ -95,6 +96,10 @@ export default function Team() {
   const [teamCoursesLoading, setTeamCoursesLoading] = useState(false);
   const [teamCoursesError, setTeamCoursesError] = useState(null);
 
+  // Meeting intelligence data (fetched in parallel with course completion)
+  const [meetingIntel, setMeetingIntel] = useState(null);
+  const [authToken, setAuthToken]       = useState(null);
+
   const handleSort = useCallback((col) => {
     setSortCol((prev) => {
       if (prev === col) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); return col; }
@@ -117,6 +122,18 @@ export default function Team() {
         const { data: { session: authSession } } = await supabase.auth.getSession();
         const token = authSession?.access_token;
         const authHeaders = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+        setAuthToken(token || null);
+
+        // Fetch meeting intelligence in parallel with everything else
+        (async () => {
+          try {
+            const miUrl = isHierarchy
+              ? `${WORKER_URL}/hs/meeting-intelligence/org?months=12`
+              : `${WORKER_URL}/hs/meeting-intelligence/team/${encodeURIComponent(effectiveUserId)}?months=6`;
+            const miRes = await fetch(miUrl, { headers: authHeaders });
+            if (miRes.ok) setMeetingIntel(await miRes.json());
+          } catch { /* non-critical */ }
+        })();
 
         if (isHierarchy) {
           // ── Hierarchy view: load direct reports (active only) ──
@@ -248,6 +265,14 @@ export default function Team() {
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
+  // Build a quick lookup of meeting intelligence per rep from the team intel data
+  const repMeetingIntelById = {};
+  if (meetingIntel?.reps) {
+    for (const r of meetingIntel.reps) {
+      if (r.user_id) repMeetingIntelById[r.user_id] = r;
+    }
+  }
+
   // Per-member avg scores
   const memberAvgScores = {};
   members.forEach((m) => {
@@ -331,17 +356,20 @@ export default function Team() {
       planProgress: progress,
       trend: memberTrend[m.id],
       lastActivity: assessments[0]?.created_at || sessions[0]?.session_date || null,
+      meetingIntel: repMeetingIntelById[m.id] || null,
     };
   });
 
   const SORT_COLS = {
-    member:          (r) => (r.member.full_name || r.member.email || '').toLowerCase(),
-    overallAvg:      (r) => r.overallAvg ?? -Infinity,
-    trend:           (r) => r.trend ?? -Infinity,
-    assessmentCount: (r) => r.assessmentCount,
-    sessionCount:    (r) => r.sessionCount,
-    openActions:     (r) => r.openActions,
-    pdp:             (r) => r.planProgress.total > 0 ? r.planProgress.completed / r.planProgress.total : -1,
+    member:             (r) => (r.member.full_name || r.member.email || '').toLowerCase(),
+    overallAvg:         (r) => r.overallAvg ?? -Infinity,
+    trend:              (r) => r.trend ?? -Infinity,
+    meetingsThisMonth:  (r) => r.meetingIntel?.meetings_this_month ?? -1,
+    avgTalkPct:         (r) => r.meetingIntel?.avg_talk_pct ?? -1,
+    assessmentCount:    (r) => r.assessmentCount,
+    sessionCount:       (r) => r.sessionCount,
+    openActions:        (r) => r.openActions,
+    pdp:                (r) => r.planProgress.total > 0 ? r.planProgress.completed / r.planProgress.total : -1,
   };
 
   const sortedRows = [...repRows].sort((a, b) => {
@@ -354,6 +382,7 @@ export default function Team() {
 
   const SORT_LABELS = {
     member: 'Rep name', overallAvg: 'Avg score', trend: 'Trend',
+    meetingsThisMonth: 'Meetings', avgTalkPct: 'Talk %',
     assessmentCount: 'Assessments', sessionCount: 'Sessions',
     openActions: 'Open actions', pdp: 'PDP progress',
   };
@@ -396,6 +425,9 @@ export default function Team() {
             <div className="stat-label">Total reps in downstream</div>
           </div>
         </div>
+
+        {/* Meeting Intelligence — org-wide summary for CRO / executives */}
+        <MeetingIntelligencePanel mode="org" token={authToken} />
 
         {/* Overall course completion rollup */}
         {teamCoursesError && (
@@ -626,9 +658,11 @@ export default function Team() {
         </p>
       </div>
 
+      {/* Meeting Intelligence summary card */}
+      {meetingIntel && <TeamMeetingIntelligenceSummary teamIntel={meetingIntel} />}
+
       {/* Summary stats */}
-      <div className="stats-grid" style={{ marginBottom: '24px' }}>
-        <div className="stat-card">
+      <div className="stats-grid" style={{ marginBottom: '24px' }}>        <div className="stat-card">
           <div className="stat-value">{members.length}</div>
           <div className="stat-label">Team members</div>
         </div>
@@ -756,13 +790,15 @@ export default function Team() {
               <thead>
                 <tr style={{ borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>
                   {[
-                    { col: 'member',          label: 'Rep',          align: 'left',   extraStyle: { paddingLeft: '16px' } },
-                    { col: 'overallAvg',      label: 'Avg score',    align: 'center', extraStyle: {} },
-                    { col: 'trend',           label: 'Trend',        align: 'center', extraStyle: {} },
-                    { col: 'assessmentCount', label: 'Assessments',  align: 'center', extraStyle: {} },
-                    { col: 'sessionCount',    label: 'Sessions',     align: 'center', extraStyle: {} },
-                    { col: 'openActions',     label: 'Open actions', align: 'center', extraStyle: {} },
-                    { col: 'pdp',             label: 'PDP progress', align: 'left',   extraStyle: { minWidth: '120px' } },
+                    { col: 'member',             label: 'Rep',          align: 'left',   extraStyle: { paddingLeft: '16px' } },
+                    { col: 'overallAvg',          label: 'Avg score',    align: 'center', extraStyle: {} },
+                    { col: 'trend',               label: 'Trend',        align: 'center', extraStyle: {} },
+                    { col: 'meetingsThisMonth',   label: 'Meetings',     align: 'center', extraStyle: {} },
+                    { col: 'avgTalkPct',          label: 'Talk %',       align: 'center', extraStyle: {} },
+                    { col: 'assessmentCount',     label: 'Assessments',  align: 'center', extraStyle: {} },
+                    { col: 'sessionCount',        label: 'Sessions',     align: 'center', extraStyle: {} },
+                    { col: 'openActions',         label: 'Open actions', align: 'center', extraStyle: {} },
+                    { col: 'pdp',                 label: 'PDP progress', align: 'left',   extraStyle: { minWidth: '120px' } },
                   ].map(({ col, label, align, extraStyle }) => {
                     const active = sortCol === col;
                     return (
@@ -788,10 +824,11 @@ export default function Team() {
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map(({ member, assessmentCount, sessionCount, openActions, overallAvg, planProgress: progress, trend, lastActivity }) => {
+                {sortedRows.map(({ member, assessmentCount, sessionCount, openActions, overallAvg, planProgress: progress, trend, lastActivity, meetingIntel: repMI }) => {
                   const allDone = progress.total > 0 && progress.completed === progress.total;
+                  const noMeetings = repMI && repMI.meetings_this_month === 0;
                   return (
-                    <tr key={member.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={member.id} style={{ borderBottom: '1px solid #f1f5f9', background: noMeetings ? '#fffbeb' : undefined }}>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <Avatar name={member.full_name || member.email} />
@@ -803,6 +840,13 @@ export default function Team() {
                               <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '1px' }}>
                                 Last activity {new Date(lastActivity).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                               </div>
+                            )}
+                            {noMeetings && (
+                              <span style={{
+                                fontSize: '0.68rem', fontWeight: 700, padding: '1px 5px',
+                                borderRadius: '99px', background: '#fef3c7', color: '#b45309',
+                                border: '1px solid #fde68a', marginTop: '2px', display: 'inline-block',
+                              }}>No meetings</span>
                             )}
                           </div>
                         </div>
@@ -816,6 +860,25 @@ export default function Team() {
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <TrendBadge value={trend} />
+                      </td>
+                      {/* Meetings this month */}
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        {repMI ? (
+                          <div>
+                            <span style={{ fontWeight: 700, color: repMI.meetings_this_month > 0 ? '#7c3aed' : '#d97706' }}>
+                              {repMI.meetings_this_month}
+                            </span>
+                            {repMI.meetings_last_month != null && (
+                              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                                {repMI.meetings_last_month} last mo
+                              </div>
+                            )}
+                          </div>
+                        ) : <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>—</span>}
+                      </td>
+                      {/* Avg talk % */}
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <TalkPctBadge pct={repMI?.avg_talk_pct ?? null} />
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <span style={{ fontWeight: 600, color: assessmentCount > 0 ? '#7c3aed' : '#94a3b8' }}>{assessmentCount}</span>
