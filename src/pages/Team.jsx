@@ -169,10 +169,14 @@ export default function Team() {
                   }
                   setAvailableRegions(regionList);
                 }
-                const { data: teamsData } = await supabase.from('teams').select('id, region_id');
+                // Build manager_id → region_id map so we can filter direct reports
+                // (who are leaders/managers) by the region their team belongs to.
+                const { data: teamsData } = await supabase.from('teams').select('id, manager_id, region_id');
                 if (teamsData) {
                   const map = {};
-                  for (const t of teamsData) if (t.region_id) map[t.id] = t.region_id;
+                  for (const t of teamsData) {
+                    if (t.region_id && t.manager_id) map[t.manager_id] = t.region_id;
+                  }
                   setTeamRegionMap(map);
                 }
               } catch { /* non-critical */ }
@@ -438,7 +442,7 @@ export default function Team() {
 
     // Apply region filter to directReports list (only when at top level, not drilled-in)
     const filteredDirectReports = (regionFilterId && !viewAsId)
-      ? directReports.filter((r) => r.team_id && teamRegionMap[r.team_id] === regionFilterId)
+      ? directReports.filter((r) => teamRegionMap[r.id] === regionFilterId)
       : directReports;
 
     return (
@@ -490,7 +494,7 @@ export default function Team() {
         {/* Meeting Intelligence — org-wide at top level, team-scoped when drilled in */}
         {viewAsId
           ? (meetingIntel && <TeamMeetingIntelligenceSummary teamIntel={meetingIntel} />)
-          : <MeetingIntelligencePanel mode="org" token={authToken} />
+          : <MeetingIntelligencePanel mode="org" token={authToken} regionId={regionFilterId || undefined} />
         }
 
         {/* Overall course completion rollup */}
