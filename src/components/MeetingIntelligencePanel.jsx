@@ -203,7 +203,7 @@ function OrgMeetingIntelligence({ token }) {
                 {/* Current period: col 5, right-aligned above the current (last) bar */}
                 <div style={{ gridColumn: '5 / 6', textAlign: 'right' }}>
                   <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#7c3aed', marginBottom: '1px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color, lineHeight: 1.1 }}>{thisVal}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color, lineHeight: 1.1 }}>{thisVal}</div>
                   <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={d} suffix={deltaSuffix} /></div>
                 </div>
               </div>
