@@ -2138,12 +2138,12 @@ export default function Admin() {
                     {
                       step: '2',
                       label: 'Configure .env (first time only)',
-                      code: `cp .env.example .env\n# Then edit .env — set SUPABASE_SUPERADMIN_JWT to your superadmin access_token\n# (sign in to dashboard → DevTools → Application → Local Storage → access_token)`,
+                      code: `cp .env.example .env\n# Then edit .env — set SCRAPER_API_KEY to the static key from Cloudflare Worker secrets\n# (must match the SCRAPER_API_KEY value set in Cloudflare → Worker → Settings → Variables & Secrets)\n# Generate a key with: openssl rand -hex 32`,
                     },
                     {
                       step: '3',
-                      label: 'Authenticate with Highspot (once per session)',
-                      code: 'npm run login\n# A Chrome window opens — sign in with your @turnitin.com Google account\n# Close the browser once you reach the Highspot dashboard',
+                      label: 'Authenticate with Highspot (once — session persists for days)',
+                      code: 'npm run login\n# A Chrome window opens — sign in with your @turnitin.com Google account\n# Window closes automatically once you reach the Highspot home page',
                     },
                     {
                       step: '4',
@@ -2153,7 +2153,7 @@ export default function Admin() {
                     {
                       step: '5',
                       label: 'Run the scraper (repeat as needed)',
-                      code: 'npm run scrape\n# Scrapes 50 meetings per run, resumes automatically\n# Re-run until all pending meetings are completed',
+                      code: 'node index.js scrape --limit 5\n# Start with a small batch to verify everything works\n# Then run larger batches: node index.js scrape --limit 100\n# Scraper resumes automatically — only picks up pending meetings',
                     },
                   ].map(({ step, label, code }) => (
                     <div key={step} style={{ marginBottom: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
