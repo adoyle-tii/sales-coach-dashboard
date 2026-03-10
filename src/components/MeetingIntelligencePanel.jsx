@@ -44,27 +44,52 @@ function RepListDrawer({ list, label, color, emptyText }) {
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
-// N = number of bars; renders using CSS grid so parent can share the same grid for labels
-function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride }) {
+// labelFn(dataPoint, index) → string|null — shown above each bar in tiny text.
+// Pass null/undefined for no labels.
+function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride, labelFn }) {
   if (!data || data.length === 0) return null;
   const values = data.map((d) => d[valueKey] ?? 0);
   const max = maxOverride ?? Math.max(...values, 1);
   const n = values.length;
+  const hasLabels = typeof labelFn === 'function';
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, 1fr)`, gap: '3px', height: '36px', alignItems: 'flex-end' }}>
-      {values.map((v, i) => (
-        <div
-          key={i}
-          title={`${data[i].month}: ${v}`}
-          style={{
-            background: i === n - 1 ? color : `${color}66`,
-            height: `${Math.max(4, Math.round((v / max) * 36))}px`,
-            borderRadius: '2px 2px 0 0',
-            transition: 'height 0.3s',
-            alignSelf: 'flex-end',
-          }}
-        />
-      ))}
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, 1fr)`, gap: '3px' }}>
+      {values.map((v, i) => {
+        const isLast = i === n - 1;
+        const label = hasLabels ? labelFn(data[i], i) : null;
+        return (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Bar label — tiny text above the bar */}
+            {label != null ? (
+              <div style={{
+                fontSize: '0.52rem',
+                fontWeight: isLast ? 700 : 500,
+                color: isLast ? color : '#94a3b8',
+                lineHeight: 1.1,
+                textAlign: 'center',
+                marginBottom: '2px',
+                whiteSpace: 'nowrap',
+              }}>
+                {label}
+              </div>
+            ) : (
+              hasLabels && <div style={{ height: '0.52rem', marginBottom: '2px' }} />
+            )}
+            {/* The bar itself */}
+            <div
+              title={`${data[i].month}: ${v}`}
+              style={{
+                width: '100%',
+                background: isLast ? color : `${color}66`,
+                height: `${Math.max(4, Math.round((v / max) * 32))}px`,
+                borderRadius: '2px 2px 0 0',
+                transition: 'height 0.3s',
+                alignSelf: 'flex-end',
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -211,6 +236,7 @@ function OrgMeetingIntelligence({ token }) {
               delta: mtgDelta, deltaSuffix: '',
               color: '#1e293b', spark: recentMonths, sparkKey: 'count', sparkColor: '#7c3aed',
               subLabel: null,
+              labelFn: (d) => d.count != null ? String(d.count) : null,
             },
             {
               label: 'Reps actively recording (2+ meetings)',
@@ -219,6 +245,7 @@ function OrgMeetingIntelligence({ token }) {
               delta: rateDelta, deltaSuffix: '%',
               color: '#1e293b', spark: recentRates, sparkKey: 'pct', sparkColor: '#2563eb',
               subLabel: null,
+              labelFn: (d) => d.active_reps != null && d.pct != null ? `${d.active_reps} · ${d.pct}%` : null,
             },
             {
               label: 'Avg internal talk ratio',
@@ -227,8 +254,9 @@ function OrgMeetingIntelligence({ token }) {
               delta: talkDelta, deltaSuffix: '%',
               color: talkRatioColor(talkThis), spark: recentTalk, sparkKey: 'avg_internal_talk_pct', sparkColor: talkRatioColor(talkThis),
               subLabel: 'Target: 40–60% · available after scraping',
+              labelFn: null,
             },
-          ].map(({ label, thisVal, lastVal, delta: d, deltaSuffix, color, spark, sparkKey, sparkColor, subLabel }) => (
+          ].map(({ label, thisVal, lastVal, delta: d, deltaSuffix, color, spark, sparkKey, sparkColor, subLabel, labelFn }) => (
             <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
               {/* Title */}
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
@@ -248,7 +276,7 @@ function OrgMeetingIntelligence({ token }) {
               </div>
               {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
               {/* Sparkbar fills the full width — prior bars align under prior value, current bar under current value */}
-              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} />
+              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} labelFn={labelFn} />
             </div>
           ))}
         </div>
@@ -407,6 +435,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       delta: s.mtd_this_month != null && s.mtd_last_month != null ? s.mtd_this_month - s.mtd_last_month : null,
       suffix: '', color: '#1e293b',
       spark: recentMonths, sparkKey: 'count', sparkColor: '#7c3aed',
+      labelFn: (d) => d.count != null ? String(d.count) : null,
     },
     {
       label: 'Reps actively recording (2+)',
@@ -415,6 +444,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       delta: s.mtd_rep_rate_this_month != null && s.mtd_rep_rate_last_month != null ? Math.round((s.mtd_rep_rate_this_month - s.mtd_rep_rate_last_month) * 10) / 10 : null,
       suffix: '%', color: '#1e293b',
       spark: recentRates, sparkKey: 'pct', sparkColor: '#2563eb',
+      labelFn: (d) => d.active_reps != null && d.pct != null ? `${d.active_reps} · ${d.pct}%` : null,
     },
     {
       label: 'Avg internal talk ratio',
@@ -424,6 +454,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       suffix: '%', color: talkRatioColor(s.mtd_talk_ratio_this_month),
       subLabel: 'Target: 40–60% · available after scraping',
       spark: recentTalk, sparkKey: 'avg_internal_talk_pct', sparkColor: talkRatioColor(s.mtd_talk_ratio_this_month),
+      labelFn: null,
     },
   ];
 
@@ -436,7 +467,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       <div className="card-body">
         {/* MTD comparison tiles — same grid layout as org view */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
-          {teamTiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel, spark, sparkKey, sparkColor }) => (
+          {teamTiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel, spark, sparkKey, sparkColor, labelFn }) => (
             <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', marginBottom: '6px' }}>
@@ -451,7 +482,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                 </div>
               </div>
               {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
-              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} />
+              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} labelFn={labelFn} />
             </div>
           ))}
         </div>
