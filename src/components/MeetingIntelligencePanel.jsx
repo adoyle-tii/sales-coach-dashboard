@@ -290,6 +290,10 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
     );
   }
 
+  const recentMonths = (s.meetings_by_month || []).slice(-5);
+  const recentRates  = (s.active_rep_rate_by_month || []).slice(-5);
+  const recentTalk   = (s.avg_talk_ratio_by_month || []).slice(-5);
+
   const teamTiles = [
     {
       label: 'Team meetings recorded',
@@ -297,6 +301,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       lastVal: s.mtd_last_month != null ? String(s.mtd_last_month) : '—',
       delta: s.mtd_this_month != null && s.mtd_last_month != null ? s.mtd_this_month - s.mtd_last_month : null,
       suffix: '', color: '#1e293b',
+      spark: recentMonths, sparkKey: 'count', sparkColor: '#7c3aed',
     },
     {
       label: 'Reps actively recording (2+)',
@@ -304,6 +309,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       lastVal: s.mtd_rep_rate_last_month != null ? `${s.mtd_rep_rate_last_month}%` : '—',
       delta: s.mtd_rep_rate_this_month != null && s.mtd_rep_rate_last_month != null ? Math.round((s.mtd_rep_rate_this_month - s.mtd_rep_rate_last_month) * 10) / 10 : null,
       suffix: '%', color: '#1e293b',
+      spark: recentRates, sparkKey: 'pct', sparkColor: '#2563eb',
     },
     {
       label: 'Avg internal talk ratio',
@@ -312,6 +318,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       delta: s.mtd_talk_ratio_this_month != null && s.mtd_talk_ratio_last_month != null ? Math.round((s.mtd_talk_ratio_this_month - s.mtd_talk_ratio_last_month) * 10) / 10 : null,
       suffix: '%', color: talkRatioColor(s.mtd_talk_ratio_this_month),
       subLabel: 'Target: 40–60% · available after scraping',
+      spark: recentTalk, sparkKey: 'avg_internal_talk_pct', sparkColor: talkRatioColor(s.mtd_talk_ratio_this_month),
     },
   ];
 
@@ -324,7 +331,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       <div className="card-body">
         {/* MTD comparison tiles — same grid layout as org view */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
-          {teamTiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel }) => (
+          {teamTiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel, spark, sparkKey, sparkColor }) => (
             <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', marginBottom: '6px' }}>
@@ -338,7 +345,8 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                   <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'flex-end' }}><TeamDeltaBadge value={delta} suffix={suffix} /></div>
                 </div>
               </div>
-              {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right' }}>{subLabel}</div>}
+              {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
+              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} />
             </div>
           ))}
         </div>
