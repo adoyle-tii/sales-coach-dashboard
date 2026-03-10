@@ -5,22 +5,24 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-asse
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
+// N = number of bars; renders using CSS grid so parent can share the same grid for labels
 function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride }) {
   if (!data || data.length === 0) return null;
   const values = data.map((d) => d[valueKey] ?? 0);
   const max = maxOverride ?? Math.max(...values, 1);
+  const n = values.length;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '32px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, 1fr)`, gap: '3px', height: '36px', alignItems: 'flex-end' }}>
       {values.map((v, i) => (
         <div
           key={i}
           title={`${data[i].month}: ${v}`}
           style={{
-            flex: 1,
-            background: i === values.length - 1 ? color : `${color}66`,
-            height: `${Math.max(4, Math.round((v / max) * 32))}px`,
+            background: i === n - 1 ? color : `${color}66`,
+            height: `${Math.max(4, Math.round((v / max) * 36))}px`,
             borderRadius: '2px 2px 0 0',
             transition: 'height 0.3s',
+            alignSelf: 'flex-end',
           }}
         />
       ))}
@@ -100,10 +102,10 @@ function OrgMeetingIntelligence({ token }) {
   const talkArr  = data.avg_talk_ratio_by_month || [];
   const mtgArr   = data.meetings_by_month || [];
 
-  // Sparkbars oldest → newest left to right (shows adoption growth trajectory)
-  const recentMonths = mtgArr.slice(-6);
-  const recentRates  = rateArr.slice(-6);
-  const recentTalk   = talkArr.slice(-6);
+  // 5 bars: drop oldest month for more breathing room; last bar = current (MTD)
+  const recentMonths = mtgArr.slice(-5);
+  const recentRates  = rateArr.slice(-5);
+  const recentTalk   = talkArr.slice(-5);
 
   // MTD values — all like-for-like (same day range this month vs last month)
   const mtdThis     = data.mtd_this_month          ?? null;
@@ -191,21 +193,18 @@ function OrgMeetingIntelligence({ token }) {
             <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
               {/* Title */}
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
-              {/* Stat row — labels/values positioned to sit above their respective bars.
-                  6 bars total: prior period covers bars 1-5 (83% width), current covers bar 6 (17%).
-                  We use a flex row where prior takes 5fr and current takes 1fr so the right
-                  edge of each column aligns with the right edge of its last bar. */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '6px' }}>
-                {/* Prior period — right-aligned within its 5/6 share */}
-                <div style={{ flex: '5', textAlign: 'right', paddingRight: '4px' }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#cbd5e1' }}>{lastVal}</div>
+              {/* Label/value row — same 5-column grid as the sparkbar for pixel-perfect alignment */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', marginBottom: '6px' }}>
+                {/* Prior period: spans cols 1-4, right-aligned to sit above bar 4 */}
+                <div style={{ gridColumn: '1 / 5', textAlign: 'right', paddingRight: '2px' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 600, color: '#94a3b8', marginBottom: '1px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#cbd5e1', lineHeight: 1.1 }}>{lastVal}</div>
                 </div>
-                {/* Current period — right-aligned within its 1/6 share */}
-                <div style={{ flex: '1', textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{thisVal}</div>
-                  <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={d} suffix={deltaSuffix} /></div>
+                {/* Current period: col 5, right-aligned above the current (last) bar */}
+                <div style={{ gridColumn: '5 / 6', textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#7c3aed', marginBottom: '1px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color, lineHeight: 1.1 }}>{thisVal}</div>
+                  <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={d} suffix={deltaSuffix} /></div>
                 </div>
               </div>
               {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
