@@ -481,12 +481,12 @@ export default function Admin() {
           ? { ...t, region_id: regionId || null, sub_region_id: subRegionId || null }
           : t
         ));
-        // If region changed, clear sub-region from local state
-        if (!subRegionId) {
-          setRegionTeams((prev) => prev.map((t) => t.id === teamId ? { ...t, sub_region_id: null } : t));
-        }
+      } else {
+        console.error('setTeamRegion failed', res.status, await res.text().catch(() => ''));
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('setTeamRegion error', err);
+    }
   }
 
   const loadCatalogue = useCallback(async () => {

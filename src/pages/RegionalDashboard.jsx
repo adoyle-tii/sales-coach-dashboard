@@ -246,7 +246,7 @@ export default function RegionalDashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8375rem' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      {['Team', 'Manager', 'Sub-region', ''].map((h) => (
+                      {['Team', 'Sub-region', ''].map((h) => (
                         <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -259,7 +259,6 @@ export default function RegionalDashboard() {
                         onClick={() => team.manager_id && navigate(`/team/view/${team.manager_id}`)}
                       >
                         <td style={{ padding: '11px 16px', fontWeight: 600, color: '#1e293b' }}>{team.name}</td>
-                        <td style={{ padding: '11px 16px', color: '#64748b' }}>{team.manager?.full_name || team.manager?.email || '—'}</td>
                         <td style={{ padding: '11px 16px' }}>
                           {team.sub_region_name
                             ? <span style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#7c3aed', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>{team.sub_region_name}</span>
