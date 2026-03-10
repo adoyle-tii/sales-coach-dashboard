@@ -95,23 +95,23 @@ function OrgMeetingIntelligence({ token }) {
 
   if (!data) return null;
 
-  // Worker returns arrays in ascending order (oldest → newest).
-  // Read current & previous month stats from the tail of the original arrays.
+  // All three KPIs use MTD vs same period last month — apples to apples.
   const rateArr  = data.active_rep_rate_by_month || [];
   const talkArr  = data.avg_talk_ratio_by_month || [];
-  const lastRate = rateArr[rateArr.length - 1] ?? null;   // most recent month
-  const prevRate = rateArr[rateArr.length - 2] ?? null;   // one month prior
-  const lastTalk = talkArr[talkArr.length - 1] ?? null;
-  const prevTalk = talkArr[talkArr.length - 2] ?? null;
+  const mtgArr   = data.meetings_by_month || [];
 
-  // Sparkbars: reversed so newest bar is on the left
-  const recentMonths = (data.meetings_by_month || []).slice(-6).reverse();
+  // Sparkbars reversed so newest bar is leftmost
+  const recentMonths = mtgArr.slice(-6).reverse();
   const recentRates  = rateArr.slice(-6).reverse();
   const recentTalk   = talkArr.slice(-6).reverse();
 
-  // MTD: this month vs same calendar day last month
-  const mtdThis = data.mtd_this_month ?? null;
-  const mtdLast = data.mtd_last_month ?? null;
+  // MTD values — all like-for-like (same day range this month vs last month)
+  const mtdThis     = data.mtd_this_month          ?? null;
+  const mtdLast     = data.mtd_last_month          ?? null;
+  const rateThis    = data.mtd_rep_rate_this_month ?? null;
+  const rateLast    = data.mtd_rep_rate_last_month ?? null;
+  const talkThis    = data.mtd_talk_ratio_this_month ?? null;
+  const talkLast    = data.mtd_talk_ratio_last_month ?? null;
 
   function delta(curr, prev) {
     if (curr == null || prev == null) return null;
@@ -133,8 +133,8 @@ function OrgMeetingIntelligence({ token }) {
   }
 
   const mtgDelta  = delta(mtdThis, mtdLast);
-  const rateDelta = delta(lastRate?.pct, prevRate?.pct);
-  const talkDelta = delta(lastTalk?.avg_internal_talk_pct, prevTalk?.avg_internal_talk_pct);
+  const rateDelta = delta(rateThis, rateLast);
+  const talkDelta = delta(talkThis, talkLast);
 
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
@@ -167,39 +167,37 @@ function OrgMeetingIntelligence({ token }) {
             </div>
           </div>
 
-          {/* Active reps */}
+          {/* Active reps — MTD */}
           <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-              {lastRate?.pct != null ? `${lastRate.pct}%` : '—'}
+              {rateThis != null ? `${rateThis}%` : '—'}
               <DeltaBadge value={rateDelta} suffix="%" />
             </div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>
-              Reps actively recording (2+ meetings/month)
+              Reps actively recording (2+ meetings, MTD)
             </div>
-            {lastRate && (
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
-                {lastRate.active_reps} of {lastRate.total_reps} reps
-              </div>
-            )}
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+              {rateLast != null ? `Same period last month: ${rateLast}%` : 'vs same period last month'}
+            </div>
             <div style={{ marginTop: '10px' }}>
               <SparkBar data={recentRates} valueKey="pct" color="#2563eb" maxOverride={100} />
             </div>
           </div>
 
-          {/* Avg talk ratio */}
+          {/* Avg talk ratio — MTD */}
           <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, lineHeight: 1, color: talkRatioColor(lastTalk?.avg_internal_talk_pct) }}>
-              {lastTalk?.avg_internal_talk_pct != null ? `${lastTalk.avg_internal_talk_pct}%` : '—'}
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, lineHeight: 1, color: talkRatioColor(talkThis) }}>
+              {talkThis != null ? `${talkThis}%` : '—'}
               <DeltaBadge value={talkDelta} suffix="%" />
             </div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>
-              Avg internal talk ratio
+              Avg internal talk ratio (MTD)
             </div>
             <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
-              Target: 40–60% (customer-led conversations)
+              Target: 40–60% · available after scraping
             </div>
             <div style={{ marginTop: '10px' }}>
-              <SparkBar data={recentTalk} valueKey="avg_internal_talk_pct" color={talkRatioColor(lastTalk?.avg_internal_talk_pct)} maxOverride={100} />
+              <SparkBar data={recentTalk} valueKey="avg_internal_talk_pct" color={talkRatioColor(talkThis)} maxOverride={100} />
             </div>
           </div>
         </div>
