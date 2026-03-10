@@ -132,7 +132,7 @@ function TalkPctBadge({ pct }) {
 
 // ── Org-wide panel (CRO / executive / senior_leader) ────────────────────────
 
-function OrgMeetingIntelligence({ token, regionId }) {
+function OrgMeetingIntelligence({ token, regionId, regionIds }) {
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
@@ -142,7 +142,12 @@ function OrgMeetingIntelligence({ token, regionId }) {
     (async () => {
       try {
         const params = new URLSearchParams({ months: '12' });
-        if (regionId) params.set('regionId', regionId);
+        // regionIds (array) takes precedence over single regionId
+        if (regionIds && regionIds.length > 0) {
+          params.set('regionIds', regionIds.join(','));
+        } else if (regionId) {
+          params.set('regionId', regionId);
+        }
         const res = await fetch(`${WORKER_URL}/hs/meeting-intelligence/org?${params}`, {
           headers: {
             'Content-Type': 'application/json',
@@ -157,7 +162,7 @@ function OrgMeetingIntelligence({ token, regionId }) {
         setLoading(false);
       }
     })();
-  }, [token, regionId]);
+  }, [token, regionId, regionIds?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="card" style={{ marginBottom: '24px' }}>
@@ -643,11 +648,12 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
  *   mode       'org' | 'team'
  *   token      Supabase access_token (string)
  *   teamIntel  Pre-fetched team intel data (for 'team' mode — avoids double fetch)
- *   regionId   Optional UUID — when provided, scopes the org view to that region
+ *   regionId   Optional UUID — scopes org view to a single region
+ *   regionIds  Optional UUID[] — scopes org view to multiple regions (takes precedence over regionId)
  */
-export default function MeetingIntelligencePanel({ mode, token, teamIntel, regionId }) {
+export default function MeetingIntelligencePanel({ mode, token, teamIntel, regionId, regionIds }) {
   if (mode === 'org') {
-    return <OrgMeetingIntelligence token={token} regionId={regionId} />;
+    return <OrgMeetingIntelligence token={token} regionId={regionId} regionIds={regionIds} />;
   }
   // 'team' mode uses pre-fetched data passed from Team.jsx
   return <TeamMeetingIntelligenceSummary teamIntel={teamIntel} />;

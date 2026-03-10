@@ -440,9 +440,18 @@ export default function Team() {
 
     const tierLabel = myRole === 'executive' ? 'Senior Leaders' : myRole === 'senior_leader' ? 'Leaders / Managers' : 'Managers';
 
+    // When the user has assigned regions and no specific filter is chosen,
+    // default to showing only their regions (not the full org).
+    const myRegionIds = availableRegions.map((r) => r.id);
+    const hasRegionScope = !viewAsId && myRegionIds.length > 0;
+
     // Apply region filter to directReports list (only when at top level, not drilled-in)
-    const filteredDirectReports = (regionFilterId && !viewAsId)
-      ? directReports.filter((r) => teamRegionMap[r.id] === regionFilterId)
+    const filteredDirectReports = !viewAsId
+      ? regionFilterId
+        ? directReports.filter((r) => teamRegionMap[r.id] === regionFilterId)
+        : myRegionIds.length > 0
+          ? directReports.filter((r) => myRegionIds.includes(teamRegionMap[r.id]))
+          : directReports
       : directReports;
 
     return (
@@ -483,7 +492,7 @@ export default function Team() {
         <div className="stats-grid" style={{ marginBottom: '24px' }}>
           <div className="stat-card">
             <div className="stat-value">{filteredDirectReports.length}</div>
-            <div className="stat-label">{regionFilterId ? 'Filtered direct reports' : 'Direct reports'}</div>
+            <div className="stat-label">{regionFilterId ? 'Filtered direct reports' : hasRegionScope ? 'Direct reports in my regions' : 'Direct reports'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#7c3aed' }}>{totalReps}</div>
@@ -494,7 +503,12 @@ export default function Team() {
         {/* Meeting Intelligence — org-wide at top level, team-scoped when drilled in */}
         {viewAsId
           ? (meetingIntel && <TeamMeetingIntelligenceSummary teamIntel={meetingIntel} />)
-          : <MeetingIntelligencePanel mode="org" token={authToken} regionId={regionFilterId || undefined} />
+          : <MeetingIntelligencePanel
+              mode="org"
+              token={authToken}
+              regionId={regionFilterId || undefined}
+              regionIds={!regionFilterId && myRegionIds.length > 0 ? myRegionIds : undefined}
+            />
         }
 
         {/* Overall course completion rollup */}
@@ -615,7 +629,7 @@ export default function Team() {
                   <div className="card-body">
                     <div className="empty-state">
                       <div className="empty-icon">👥</div>
-                      <div>{regionFilterId ? 'No direct reports in this region.' : 'No direct reports found.'}</div>
+                      <div>{regionFilterId ? 'No direct reports in this region.' : hasRegionScope ? 'No direct reports found in your assigned regions.' : 'No direct reports found.'}</div>
                     </div>
                   </div>
                 </div>
