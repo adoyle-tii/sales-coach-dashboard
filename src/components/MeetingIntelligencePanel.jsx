@@ -204,7 +204,7 @@ function OrgMeetingIntelligence({ token }) {
                 {data.meetings_this_year?.toLocaleString() ?? '—'}
               </div>
               <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                Total meetings {new Date().getFullYear()}
+                Total meetings {data.meetings_by_quarter?.[0]?.quarter?.slice(-4) ?? new Date().getFullYear()}
               </div>
             </div>
             {/* Quarterly breakdown */}
