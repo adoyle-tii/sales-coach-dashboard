@@ -144,8 +144,8 @@ function OrgMeetingIntelligence({ token }) {
         </span>
       </div>
       <div className="card-body">
-        {/* KPI stat row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '20px' }}>
+        {/* KPI stat row — top 3 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
           {/* Meetings this month */}
           <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
@@ -194,6 +194,32 @@ function OrgMeetingIntelligence({ token }) {
             </div>
           </div>
         </div>
+
+        {/* Yearly total + quarterly breakdown */}
+        {(data.meetings_this_year != null || data.meetings_by_quarter?.length > 0) && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '16px', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            {/* Yearly total */}
+            <div style={{ paddingRight: '16px', borderRight: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
+                {data.meetings_this_year?.toLocaleString() ?? '—'}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                Total meetings {new Date().getFullYear()}
+              </div>
+            </div>
+            {/* Quarterly breakdown */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              {(data.meetings_by_quarter || []).map((q) => (
+                <div key={q.quarter} style={{ minWidth: '60px' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: q.count > 0 ? '#1e293b' : '#cbd5e1' }}>
+                    {q.count > 0 ? q.count.toLocaleString() : '—'}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{q.quarter}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
