@@ -351,18 +351,91 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
           ))}
         </div>
 
-        {/* Active/inactive rep counts */}
+        {/* Rep engagement panels — MTD breakdown + YTD */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
-          <div className="stat-card">
-            <div className="stat-value" style={{ color: '#16a34a' }}>{s.active_reps}</div>
-            <div className="stat-label">Active reps (2+ meetings this month)</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value" style={{ color: s.inactive_reps > 0 ? '#d97706' : '#94a3b8' }}>{s.inactive_reps}</div>
-            <div className="stat-label" style={{ color: s.inactive_reps > 0 ? '#d97706' : undefined }}>
-              {s.inactive_reps > 0 ? 'No meetings recorded' : 'Inactive reps'}
+
+          {/* Panel 1 — This month (MTD) breakdown */}
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#15803d', marginBottom: '10px' }}>
+              Rep activity — {thisPeriod}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {/* 2+ meetings */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#16a34a', lineHeight: 1 }}>
+                    {s.mtd_active_reps ?? s.active_reps ?? 0}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>active<br/>(2+ meetings)</span>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>
+                  of {s.total_team_reps ?? '—'}
+                </span>
+              </div>
+              {/* Divider */}
+              <div style={{ height: '1px', background: '#bbf7d0' }} />
+              {/* 1 meeting */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>
+                    {s.mtd_low_reps ?? 0}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 500 }}>low activity<br/>(1 meeting)</span>
+                </div>
+              </div>
+              {/* 0 meetings */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dc2626', lineHeight: 1 }}>
+                    {s.mtd_inactive_reps ?? s.inactive_reps ?? 0}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 500 }}>no meetings<br/>recorded</span>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Panel 2 — YTD rep engagement */}
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#1d4ed8', marginBottom: '10px' }}>
+              Rep engagement — YTD {s.current_year ?? new Date().getFullYear()}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {/* Reps with any meeting YTD */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>
+                    {s.reps_with_meetings_ytd ?? '—'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>recording<br/>meetings YTD</span>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>
+                  of {s.total_team_reps ?? '—'}
+                </span>
+              </div>
+              {/* Progress bar */}
+              {s.total_team_reps > 0 && s.reps_with_meetings_ytd != null && (
+                <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '3px', background: '#2563eb',
+                    width: `${Math.round((s.reps_with_meetings_ytd / s.total_team_reps) * 100)}%`,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
+              <div style={{ height: '1px', background: '#bfdbfe' }} />
+              {/* Reps with zero meetings YTD */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: s.reps_no_meetings_ytd > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>
+                  {s.reps_no_meetings_ytd ?? '—'}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: s.reps_no_meetings_ytd > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>
+                  never recorded<br/>a meeting {s.current_year ?? ''}
+                </span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         {/* YTD total + quarterly breakdown */}
