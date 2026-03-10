@@ -95,12 +95,19 @@ function OrgMeetingIntelligence({ token }) {
 
   if (!data) return null;
 
-  // Most recent month stats (for sparkline labels / talk ratio)
-  const lastRate  = data.active_rep_rate_by_month?.[data.active_rep_rate_by_month.length - 1];
-  const lastTalk  = data.avg_talk_ratio_by_month?.[data.avg_talk_ratio_by_month.length - 1];
+  // Worker returns arrays in ascending order (oldest → newest).
+  // Read current & previous month stats from the tail of the original arrays.
+  const rateArr  = data.active_rep_rate_by_month || [];
+  const talkArr  = data.avg_talk_ratio_by_month || [];
+  const lastRate = rateArr[rateArr.length - 1] ?? null;   // most recent month
+  const prevRate = rateArr[rateArr.length - 2] ?? null;   // one month prior
+  const lastTalk = talkArr[talkArr.length - 1] ?? null;
+  const prevTalk = talkArr[talkArr.length - 2] ?? null;
+
+  // Sparkbars: reversed so newest bar is on the left
   const recentMonths = (data.meetings_by_month || []).slice(-6).reverse();
-  const recentRates  = (data.active_rep_rate_by_month || []).slice(-6).reverse();
-  const recentTalk   = (data.avg_talk_ratio_by_month || []).slice(-6).reverse();
+  const recentRates  = rateArr.slice(-6).reverse();
+  const recentTalk   = talkArr.slice(-6).reverse();
 
   // MTD: this month vs same calendar day last month
   const mtdThis = data.mtd_this_month ?? null;
@@ -125,14 +132,9 @@ function OrgMeetingIntelligence({ token }) {
     );
   }
 
-  function prevValue(arr, key) {
-    if (!arr || arr.length < 2) return null;
-    return arr[arr.length - 2]?.[key] ?? null;
-  }
-
   const mtgDelta  = delta(mtdThis, mtdLast);
-  const rateDelta = delta(lastRate?.pct,  prevValue(data.active_rep_rate_by_month, 'pct'));
-  const talkDelta = delta(lastTalk?.avg_internal_talk_pct, prevValue(data.avg_talk_ratio_by_month, 'avg_internal_talk_pct'));
+  const rateDelta = delta(lastRate?.pct, prevRate?.pct);
+  const talkDelta = delta(lastTalk?.avg_internal_talk_pct, prevTalk?.avg_internal_talk_pct);
 
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
