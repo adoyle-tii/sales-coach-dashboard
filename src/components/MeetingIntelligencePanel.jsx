@@ -1,7 +1,46 @@
 import { useEffect, useState } from 'react';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
-// v4 — quarters descending, MTD vs same-day last month, YTD/quarterly clarity
+// v5 — rep list drill-down on engagement panels
+
+// ── Expandable rep name list ─────────────────────────────────────────────────
+function RepListDrawer({ list, label, color, emptyText }) {
+  const [open, setOpen] = useState(false);
+  if (!list || list.length === 0) return null;
+  return (
+    <div style={{ marginTop: '4px' }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          fontSize: '0.65rem', fontWeight: 600, color, background: 'none', border: 'none',
+          padding: '0', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px',
+        }}
+      >
+        {open ? '▲ hide' : `▼ show ${list.length} rep${list.length !== 1 ? 's' : ''}`}
+      </button>
+      {open && (
+        <div style={{
+          marginTop: '6px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px',
+          padding: '8px 10px', maxHeight: '180px', overflowY: 'auto',
+        }}>
+          {list.length === 0
+            ? <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{emptyText || 'None'}</span>
+            : list.map((r) => (
+              <div key={r.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <span style={{ fontSize: '0.72rem', color: '#1e293b', fontWeight: 500 }}>{r.name}</span>
+                {r.count != null && (
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8', marginLeft: '8px', whiteSpace: 'nowrap' }}>
+                    {r.count} mtg{r.count !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
@@ -231,15 +270,18 @@ function OrgMeetingIntelligence({ token }) {
                   </div>
                   <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
                 </div>
+                <RepListDrawer list={data.mtd_active_rep_list} color="#16a34a" />
                 <div style={{ height: '1px', background: '#bbf7d0' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>{data.mtd_low_reps ?? 0}</span>
                   <span style={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 500 }}>low activity<br/>(1 meeting)</span>
                 </div>
+                <RepListDrawer list={data.mtd_low_rep_list} color="#d97706" />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dc2626', lineHeight: 1 }}>{data.mtd_inactive_reps ?? 0}</span>
                   <span style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 500 }}>no meetings<br/>recorded</span>
                 </div>
+                <RepListDrawer list={data.mtd_inactive_rep_list} color="#dc2626" />
               </div>
             </div>
 
@@ -252,10 +294,10 @@ function OrgMeetingIntelligence({ token }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>{data.reps_with_meetings_ytd ?? '—'}</span>
-              <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                    <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
-              </div>
               {data.total_team_reps > 0 && data.reps_with_meetings_ytd != null && (
                 <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
                   <div style={{
@@ -269,7 +311,8 @@ function OrgMeetingIntelligence({ token }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_no_meetings_ytd ?? '—'}</span>
                 <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>not hosted<br/>a meeting {data.current_year ?? ''}</span>
-                </div>
+              </div>
+              <RepListDrawer list={data.reps_no_meetings_ytd_list} color="#dc2626" />
               </div>
             </div>
 
@@ -434,26 +477,25 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                   of {s.total_team_reps ?? '—'}
                 </span>
               </div>
+              <RepListDrawer list={s.mtd_active_rep_list} color="#16a34a" />
               {/* Divider */}
               <div style={{ height: '1px', background: '#bbf7d0' }} />
               {/* 1 meeting */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>
-                    {s.mtd_low_reps ?? 0}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 500 }}>low activity<br/>(1 meeting)</span>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>
+                  {s.mtd_low_reps ?? 0}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 500 }}>low activity<br/>(1 meeting)</span>
               </div>
+              <RepListDrawer list={s.mtd_low_rep_list} color="#d97706" />
               {/* 0 meetings */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dc2626', lineHeight: 1 }}>
-                    {s.mtd_inactive_reps ?? s.inactive_reps ?? 0}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 500 }}>no meetings<br/>recorded</span>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dc2626', lineHeight: 1 }}>
+                  {s.mtd_inactive_reps ?? s.inactive_reps ?? 0}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 500 }}>no meetings<br/>recorded</span>
               </div>
+              <RepListDrawer list={s.mtd_inactive_rep_list} color="#dc2626" />
             </div>
           </div>
 
@@ -495,6 +537,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                   not hosted<br/>a meeting {s.current_year ?? ''}
                 </span>
               </div>
+              <RepListDrawer list={s.reps_no_meetings_ytd_list} color="#dc2626" />
             </div>
           </div>
 
