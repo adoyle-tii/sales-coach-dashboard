@@ -268,58 +268,89 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
   if (!teamIntel?.team_summary) return null;
   const s = teamIntel.team_summary;
 
+  const now = new Date();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const thisMonthName = monthNames[now.getUTCMonth()];
+  const lastMonthName = monthNames[now.getUTCMonth() === 0 ? 11 : now.getUTCMonth() - 1];
+  const dayOfMonth = now.getUTCDate();
+  const thisPeriod = `${thisMonthName} 1–${dayOfMonth}`;
+  const lastPeriod  = `${lastMonthName} 1–${dayOfMonth}`;
+
+  function TeamDeltaBadge({ value, suffix = '' }) {
+    if (value == null) return null;
+    const up = value > 0, zero = value === 0;
+    return (
+      <span style={{
+        fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '99px',
+        background: zero ? '#f1f5f9' : up ? '#dcfce7' : '#fee2e2',
+        color: zero ? '#94a3b8' : up ? '#16a34a' : '#dc2626',
+      }}>
+        {zero ? '–' : `${up ? '+' : ''}${typeof value === 'number' ? value.toFixed(value % 1 === 0 ? 0 : 1) : value}${suffix}`}
+      </span>
+    );
+  }
+
+  const teamTiles = [
+    {
+      label: 'Team meetings recorded',
+      thisVal: s.mtd_this_month != null ? String(s.mtd_this_month) : '—',
+      lastVal: s.mtd_last_month != null ? String(s.mtd_last_month) : '—',
+      delta: s.mtd_this_month != null && s.mtd_last_month != null ? s.mtd_this_month - s.mtd_last_month : null,
+      suffix: '', color: '#1e293b',
+    },
+    {
+      label: 'Reps actively recording (2+)',
+      thisVal: s.mtd_rep_rate_this_month != null ? `${s.mtd_rep_rate_this_month}%` : '—',
+      lastVal: s.mtd_rep_rate_last_month != null ? `${s.mtd_rep_rate_last_month}%` : '—',
+      delta: s.mtd_rep_rate_this_month != null && s.mtd_rep_rate_last_month != null ? Math.round((s.mtd_rep_rate_this_month - s.mtd_rep_rate_last_month) * 10) / 10 : null,
+      suffix: '%', color: '#1e293b',
+    },
+    {
+      label: 'Avg internal talk ratio',
+      thisVal: s.mtd_talk_ratio_this_month != null ? `${s.mtd_talk_ratio_this_month}%` : '—',
+      lastVal: s.mtd_talk_ratio_last_month != null ? `${s.mtd_talk_ratio_last_month}%` : '—',
+      delta: s.mtd_talk_ratio_this_month != null && s.mtd_talk_ratio_last_month != null ? Math.round((s.mtd_talk_ratio_this_month - s.mtd_talk_ratio_last_month) * 10) / 10 : null,
+      suffix: '%', color: talkRatioColor(s.mtd_talk_ratio_this_month),
+      subLabel: 'Target: 40–60% · available after scraping',
+    },
+  ];
+
   return (
     <div className="card" style={{ marginBottom: '24px' }}>
       <div className="card-header">
         <h2 className="card-title">Meeting Intelligence</h2>
-        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>this month vs last month</span>
+        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{thisPeriod} vs {lastPeriod}</span>
       </div>
       <div className="card-body">
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-          <div className="stat-card">
-            <div className="stat-value" style={{ color: '#7c3aed' }}>
-              {s.mtd_this_month ?? s.meetings_this_month}
-              {s.mtd_last_month != null && s.mtd_this_month != null && (() => {
-                const d = s.mtd_this_month - s.mtd_last_month;
-                const up = d > 0, zero = d === 0;
-                return (
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '99px', marginLeft: '6px',
-                    background: zero ? '#f1f5f9' : up ? '#dcfce7' : '#fee2e2',
-                    color: zero ? '#94a3b8' : up ? '#16a34a' : '#dc2626',
-                    verticalAlign: 'middle',
-                  }}>
-                    {zero ? '–' : `${up ? '+' : ''}${d}`}
-                  </span>
-                );
-              })()}
-            </div>
-            <div className="stat-label">
-              Team meetings (MTD)
-              {s.mtd_last_month != null && (
-                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>
-                  Same point last month: {s.mtd_last_month}
+        {/* MTD comparison tiles — same grid layout as org view */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
+          {teamTiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel }) => (
+            <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', marginBottom: '6px' }}>
+                <div style={{ gridColumn: '1 / 5', textAlign: 'right', paddingRight: '2px' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 600, color: '#94a3b8', marginBottom: '1px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#cbd5e1', lineHeight: 1.1 }}>{lastVal}</div>
                 </div>
-              )}
+                <div style={{ gridColumn: '5 / 6', textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#7c3aed', marginBottom: '1px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color, lineHeight: 1.1 }}>{thisVal}</div>
+                  <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'flex-end' }}><TeamDeltaBadge value={delta} suffix={suffix} /></div>
+                </div>
+              </div>
+              {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right' }}>{subLabel}</div>}
             </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value" style={{ color: talkRatioColor(s.avg_internal_talk_pct) }}>
-              {s.avg_internal_talk_pct != null ? `${s.avg_internal_talk_pct}%` : '—'}
-            </div>
-            <div className="stat-label">Avg talk ratio</div>
-          </div>
+          ))}
+        </div>
+
+        {/* Active/inactive rep counts */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
           <div className="stat-card">
             <div className="stat-value" style={{ color: '#16a34a' }}>{s.active_reps}</div>
-            <div className="stat-label">Active reps (2+ meetings)</div>
+            <div className="stat-label">Active reps (2+ meetings this month)</div>
           </div>
           <div className="stat-card">
-            <div
-              className="stat-value"
-              style={{ color: s.inactive_reps > 0 ? '#d97706' : '#94a3b8' }}
-            >
-              {s.inactive_reps}
-            </div>
+            <div className="stat-value" style={{ color: s.inactive_reps > 0 ? '#d97706' : '#94a3b8' }}>{s.inactive_reps}</div>
             <div className="stat-label" style={{ color: s.inactive_reps > 0 ? '#d97706' : undefined }}>
               {s.inactive_reps > 0 ? 'No meetings recorded' : 'Inactive reps'}
             </div>
