@@ -191,15 +191,18 @@ function OrgMeetingIntelligence({ token }) {
             <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
               {/* Title */}
               <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
-              {/* Stat row: prior left, current right, aligned above their bars */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                {/* Prior period */}
-                <div style={{ textAlign: 'left' }}>
+              {/* Stat row — labels/values positioned to sit above their respective bars.
+                  6 bars total: prior period covers bars 1-5 (83% width), current covers bar 6 (17%).
+                  We use a flex row where prior takes 5fr and current takes 1fr so the right
+                  edge of each column aligns with the right edge of its last bar. */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '6px' }}>
+                {/* Prior period — right-aligned within its 5/6 share */}
+                <div style={{ flex: '5', textAlign: 'right', paddingRight: '4px' }}>
                   <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#cbd5e1' }}>{lastVal}</div>
                 </div>
-                {/* Current period — right aligned, delta pill sits below the number */}
-                <div style={{ textAlign: 'right' }}>
+                {/* Current period — right-aligned within its 1/6 share */}
+                <div style={{ flex: '1', textAlign: 'right' }}>
                   <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{thisVal}</div>
                   <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={d} suffix={deltaSuffix} /></div>
