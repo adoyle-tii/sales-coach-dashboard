@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
-// v3 — YTD label, current quarter + last 3, clear labels
+// v4 — quarters descending, MTD vs same-day last month, YTD/quarterly clarity
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
@@ -95,19 +95,17 @@ function OrgMeetingIntelligence({ token }) {
 
   if (!data) return null;
 
-  // Most recent month stats
-  const lastMtg  = data.meetings_by_month?.[data.meetings_by_month.length - 1];
+  // Most recent month stats (for sparkline labels / talk ratio)
   const lastRate  = data.active_rep_rate_by_month?.[data.active_rep_rate_by_month.length - 1];
   const lastTalk  = data.avg_talk_ratio_by_month?.[data.avg_talk_ratio_by_month.length - 1];
   const recentMonths = (data.meetings_by_month || []).slice(-6);
   const recentRates  = (data.active_rep_rate_by_month || []).slice(-6);
   const recentTalk   = (data.avg_talk_ratio_by_month || []).slice(-6);
 
-  // Month-over-month delta helpers
-  function prevValue(arr, key) {
-    if (!arr || arr.length < 2) return null;
-    return arr[arr.length - 2]?.[key] ?? null;
-  }
+  // MTD: this month vs same calendar day last month
+  const mtdThis = data.mtd_this_month ?? null;
+  const mtdLast = data.mtd_last_month ?? null;
+
   function delta(curr, prev) {
     if (curr == null || prev == null) return null;
     return curr - prev;
@@ -127,7 +125,12 @@ function OrgMeetingIntelligence({ token }) {
     );
   }
 
-  const mtgDelta  = delta(lastMtg?.count, prevValue(data.meetings_by_month, 'count'));
+  function prevValue(arr, key) {
+    if (!arr || arr.length < 2) return null;
+    return arr[arr.length - 2]?.[key] ?? null;
+  }
+
+  const mtgDelta  = delta(mtdThis, mtdLast);
   const rateDelta = delta(lastRate?.pct,  prevValue(data.active_rep_rate_by_month, 'pct'));
   const talkDelta = delta(lastTalk?.avg_internal_talk_pct, prevValue(data.avg_talk_ratio_by_month, 'avg_internal_talk_pct'));
 
@@ -147,13 +150,16 @@ function OrgMeetingIntelligence({ token }) {
       <div className="card-body">
         {/* KPI stat row — top 3 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
-          {/* Meetings this month */}
+          {/* Meetings MTD */}
           <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-              {lastMtg?.count ?? '—'}
+              {mtdThis ?? '—'}
               <DeltaBadge value={mtgDelta} />
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Meetings recorded (this month)</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Meetings recorded (month to date)</div>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+              {mtdLast != null ? `Same point last month: ${mtdLast}` : 'vs same day last month'}
+            </div>
             <div style={{ marginTop: '10px' }}>
               <SparkBar data={recentMonths} valueKey="count" color="#7c3aed" />
             </div>
@@ -259,16 +265,29 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       <div className="card-body">
         <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
           <div className="stat-card">
-            <div className="stat-value" style={{ color: '#7c3aed' }}>{s.meetings_this_month}</div>
+            <div className="stat-value" style={{ color: '#7c3aed' }}>
+              {s.mtd_this_month ?? s.meetings_this_month}
+              {s.mtd_last_month != null && s.mtd_this_month != null && (() => {
+                const d = s.mtd_this_month - s.mtd_last_month;
+                const up = d > 0, zero = d === 0;
+                return (
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '99px', marginLeft: '6px',
+                    background: zero ? '#f1f5f9' : up ? '#dcfce7' : '#fee2e2',
+                    color: zero ? '#94a3b8' : up ? '#16a34a' : '#dc2626',
+                    verticalAlign: 'middle',
+                  }}>
+                    {zero ? '–' : `${up ? '+' : ''}${d}`}
+                  </span>
+                );
+              })()}
+            </div>
             <div className="stat-label">
-              Team meetings
-              {s.meetings_last_month > 0 && (
-                <span style={{
-                  fontSize: '0.68rem', marginLeft: '4px', fontWeight: 600,
-                  color: s.meetings_this_month >= s.meetings_last_month ? '#16a34a' : '#d97706',
-                }}>
-                  (was {s.meetings_last_month})
-                </span>
+              Team meetings (MTD)
+              {s.mtd_last_month != null && (
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>
+                  Same point last month: {s.mtd_last_month}
+                </div>
               )}
             </div>
           </div>
