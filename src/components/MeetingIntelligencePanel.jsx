@@ -161,71 +161,55 @@ function OrgMeetingIntelligence({ token }) {
       <div className="card-body">
         {/* KPI stat row — top 3 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
-          {/* Meetings MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Meetings recorded</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{mtdLast ?? '—'}</div>
-              </div>
-              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
-                  {mtdThis ?? '—'}<DeltaBadge value={mtgDelta} />
+          {/* Reusable MTD comparison tile layout */}
+          {[
+            {
+              label: 'Meetings recorded',
+              thisVal: mtdThis != null ? String(mtdThis) : '—',
+              lastVal: mtdLast != null ? String(mtdLast) : '—',
+              delta: mtgDelta, deltaSuffix: '',
+              color: '#1e293b', spark: recentMonths, sparkKey: 'count', sparkColor: '#7c3aed',
+              subLabel: null,
+            },
+            {
+              label: 'Reps actively recording (2+ meetings)',
+              thisVal: rateThis != null ? `${rateThis}%` : '—',
+              lastVal: rateLast != null ? `${rateLast}%` : '—',
+              delta: rateDelta, deltaSuffix: '%',
+              color: '#1e293b', spark: recentRates, sparkKey: 'pct', sparkColor: '#2563eb',
+              subLabel: null,
+            },
+            {
+              label: 'Avg internal talk ratio',
+              thisVal: talkThis != null ? `${talkThis}%` : '—',
+              lastVal: talkLast != null ? `${talkLast}%` : '—',
+              delta: talkDelta, deltaSuffix: '%',
+              color: talkRatioColor(talkThis), spark: recentTalk, sparkKey: 'avg_internal_talk_pct', sparkColor: talkRatioColor(talkThis),
+              subLabel: 'Target: 40–60% · available after scraping',
+            },
+          ].map(({ label, thisVal, lastVal, delta: d, deltaSuffix, color, spark, sparkKey, sparkColor, subLabel }) => (
+            <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+              {/* Title */}
+              <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
+              {/* Stat row: prior left, current right, aligned above their bars */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                {/* Prior period */}
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#cbd5e1' }}>{lastVal}</div>
+                </div>
+                {/* Current period — right aligned, delta pill sits below the number */}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{thisVal}</div>
+                  <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={d} suffix={deltaSuffix} /></div>
                 </div>
               </div>
+              {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
+              {/* Sparkbar fills the full width — prior bars align under prior value, current bar under current value */}
+              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} />
             </div>
-            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
-              <SparkBar data={recentMonths} valueKey="count" color="#7c3aed" />
-            </div>
-          </div>
-
-          {/* Active reps — MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Reps actively recording (2+ meetings)</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{rateLast != null ? `${rateLast}%` : '—'}</div>
-              </div>
-              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
-                  {rateThis != null ? `${rateThis}%` : '—'}<DeltaBadge value={rateDelta} suffix="%" />
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
-              <SparkBar data={recentRates} valueKey="pct" color="#2563eb" maxOverride={100} />
-            </div>
-          </div>
-
-          {/* Avg talk ratio — MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Avg internal talk ratio</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{talkLast != null ? `${talkLast}%` : '—'}</div>
-              </div>
-              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: talkRatioColor(talkThis), lineHeight: 1 }}>
-                  {talkThis != null ? `${talkThis}%` : '—'}<DeltaBadge value={talkDelta} suffix="%" />
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '4px', textAlign: 'right' }}>
-              Target: 40–60% · available after scraping
-            </div>
-            <div style={{ marginTop: 'auto', paddingTop: '6px' }}>
-              <SparkBar data={recentTalk} valueKey="avg_internal_talk_pct" color={talkRatioColor(talkThis)} maxOverride={100} />
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* YTD total + quarterly breakdown */}
