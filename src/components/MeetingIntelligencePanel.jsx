@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
-// v2 — yearly/quarterly stats, full pagination support
+// v3 — YTD label, current quarter + last 3, clear labels
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
@@ -196,28 +196,46 @@ function OrgMeetingIntelligence({ token }) {
           </div>
         </div>
 
-        {/* Yearly total + quarterly breakdown */}
-        {(data.meetings_this_year != null || data.meetings_by_quarter?.length > 0) && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '16px', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            {/* Yearly total */}
-            <div style={{ paddingRight: '16px', borderRight: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-                {data.meetings_this_year?.toLocaleString() ?? '—'}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                Total meetings {data.meetings_by_quarter?.[data.meetings_by_quarter.length - 1]?.quarter?.slice(-4) ?? new Date().getFullYear()}
-              </div>
-            </div>
-            {/* Quarterly breakdown */}
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              {(data.meetings_by_quarter || []).map((q) => (
-                <div key={q.quarter} style={{ minWidth: '60px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: q.count > 0 ? '#1e293b' : '#cbd5e1' }}>
-                    {q.count > 0 ? q.count.toLocaleString() : '—'}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{q.quarter}</div>
+        {/* YTD total + quarterly breakdown */}
+        {(data.ytd_meetings != null || data.meetings_by_quarter?.length > 0) && (
+          <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0', alignItems: 'stretch' }}>
+              {/* YTD stat */}
+              <div style={{ paddingRight: '20px', marginRight: '20px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#7c3aed', marginBottom: '4px' }}>
+                  Year to Date ({data.current_year ?? new Date().getFullYear()})
                 </div>
-              ))}
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
+                  {data.ytd_meetings?.toLocaleString() ?? '—'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>meetings recorded</div>
+              </div>
+              {/* Quarterly breakdown */}
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', marginBottom: '8px' }}>
+                  Quarterly Breakdown
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {(data.meetings_by_quarter || []).map((q) => (
+                    <div
+                      key={q.quarter_key ?? q.quarter}
+                      style={{
+                        flex: '1', minWidth: '64px', padding: '8px 10px',
+                        background: q.is_current ? '#ede9fe' : '#fff',
+                        border: `1px solid ${q.is_current ? '#7c3aed' : '#e2e8f0'}`,
+                        borderRadius: '6px', textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '1.15rem', fontWeight: 700, color: q.count > 0 ? (q.is_current ? '#7c3aed' : '#1e293b') : '#cbd5e1' }}>
+                        {q.count > 0 ? q.count.toLocaleString() : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 600, color: q.is_current ? '#7c3aed' : '#94a3b8', marginTop: '2px' }}>
+                        {q.quarter}{q.is_current ? ' ✦' : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -277,26 +295,44 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
           </div>
         </div>
 
-        {/* Yearly total + quarterly breakdown */}
-        {(s.meetings_this_year != null || s.meetings_by_quarter?.length > 0) && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '16px', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <div style={{ paddingRight: '16px', borderRight: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-                {s.meetings_this_year?.toLocaleString() ?? '—'}
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                Total meetings {s.report_year ?? new Date().getFullYear()}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              {(s.meetings_by_quarter || []).map((q) => (
-                <div key={q.quarter} style={{ minWidth: '60px' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: q.count > 0 ? '#1e293b' : '#cbd5e1' }}>
-                    {q.count > 0 ? q.count.toLocaleString() : '—'}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{q.quarter}</div>
+        {/* YTD total + quarterly breakdown */}
+        {(s.ytd_meetings != null || s.meetings_by_quarter?.length > 0) && (
+          <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0', alignItems: 'stretch' }}>
+              <div style={{ paddingRight: '20px', marginRight: '20px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#7c3aed', marginBottom: '4px' }}>
+                  Year to Date ({s.current_year ?? new Date().getFullYear()})
                 </div>
-              ))}
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
+                  {s.ytd_meetings?.toLocaleString() ?? '—'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>team meetings recorded</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', marginBottom: '8px' }}>
+                  Quarterly Breakdown
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {(s.meetings_by_quarter || []).map((q) => (
+                    <div
+                      key={q.quarter_key ?? q.quarter}
+                      style={{
+                        flex: '1', minWidth: '64px', padding: '8px 10px',
+                        background: q.is_current ? '#ede9fe' : '#fff',
+                        border: `1px solid ${q.is_current ? '#7c3aed' : '#e2e8f0'}`,
+                        borderRadius: '6px', textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: '1.15rem', fontWeight: 700, color: q.count > 0 ? (q.is_current ? '#7c3aed' : '#1e293b') : '#cbd5e1' }}>
+                        {q.count > 0 ? q.count.toLocaleString() : '—'}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 600, color: q.is_current ? '#7c3aed' : '#94a3b8', marginTop: '2px' }}>
+                        {q.quarter}{q.is_current ? ' ✦' : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
