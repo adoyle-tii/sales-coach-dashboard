@@ -113,6 +113,15 @@ function OrgMeetingIntelligence({ token }) {
   const talkThis    = data.mtd_talk_ratio_this_month ?? null;
   const talkLast    = data.mtd_talk_ratio_last_month ?? null;
 
+  // Human-readable period labels e.g. "Mar 1–10" vs "Feb 1–10"
+  const now = new Date();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const thisMonthName = monthNames[now.getUTCMonth()];
+  const lastMonthName = monthNames[now.getUTCMonth() === 0 ? 11 : now.getUTCMonth() - 1];
+  const dayOfMonth = now.getUTCDate();
+  const thisPeriod = `${thisMonthName} 1–${dayOfMonth}`;
+  const lastPeriod = `${lastMonthName} 1–${dayOfMonth}`;
+
   function delta(curr, prev) {
     if (curr == null || prev == null) return null;
     return curr - prev;
@@ -158,9 +167,11 @@ function OrgMeetingIntelligence({ token }) {
               {mtdThis ?? '—'}
               <DeltaBadge value={mtgDelta} />
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Meetings recorded (month to date)</div>
-            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
-              {mtdLast != null ? `Same point last month: ${mtdLast}` : 'vs same day last month'}
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Meetings recorded</div>
+            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
+              <span style={{ color: '#94a3b8' }}>vs</span>
+              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{mtdLast != null ? ` (${mtdLast})` : ''}</span>
             </div>
             <div style={{ marginTop: '10px' }}>
               <SparkBar data={recentMonths} valueKey="count" color="#7c3aed" />
@@ -173,11 +184,11 @@ function OrgMeetingIntelligence({ token }) {
               {rateThis != null ? `${rateThis}%` : '—'}
               <DeltaBadge value={rateDelta} suffix="%" />
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>
-              Reps actively recording (2+ meetings, MTD)
-            </div>
-            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
-              {rateLast != null ? `Same period last month: ${rateLast}%` : 'vs same period last month'}
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Reps actively recording (2+ meetings)</div>
+            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
+              <span style={{ color: '#94a3b8' }}>vs</span>
+              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{rateLast != null ? ` (${rateLast}%)` : ''}</span>
             </div>
             <div style={{ marginTop: '10px' }}>
               <SparkBar data={recentRates} valueKey="pct" color="#2563eb" maxOverride={100} />
@@ -190,11 +201,11 @@ function OrgMeetingIntelligence({ token }) {
               {talkThis != null ? `${talkThis}%` : '—'}
               <DeltaBadge value={talkDelta} suffix="%" />
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>
-              Avg internal talk ratio (MTD)
-            </div>
-            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
-              Target: 40–60% · available after scraping
+            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Avg internal talk ratio</div>
+            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
+              <span style={{ color: '#94a3b8' }}>vs</span>
+              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{talkLast != null ? ` (${talkLast}%)` : ' · available after scraping'}</span>
             </div>
             <div style={{ marginTop: '10px' }}>
               <SparkBar data={recentTalk} valueKey="avg_internal_talk_pct" color={talkRatioColor(talkThis)} maxOverride={100} />
