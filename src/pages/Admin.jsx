@@ -130,6 +130,8 @@ export default function Admin() {
   const [meetingIngestSuccess, setMeetingIngestSuccess] = useState(null);
   const [meetingCsvFiles, setMeetingCsvFiles]           = useState({});
   const [meetingIngestStats, setMeetingIngestStats]     = useState(null);
+  const [finalizeOnlyLoading, setFinalizeOnlyLoading]   = useState(null); // 'meetings' | 'attendees' | null
+  const [finalizeOnlyMsg, setFinalizeOnlyMsg]           = useState(null);
 
   useEffect(() => { supabase?.auth.getUser().then(({ data }) => setCurrentUserId(data?.user?.id)); }, []);
   useEffect(() => { load(); }, []);
@@ -729,6 +731,43 @@ export default function Admin() {
     return () => clearInterval(interval);
   }, [scraperOpen, scraperAutoRefresh]);
 
+  async function runFinalizeOnly(step) {
+    // step: 'meetings' | 'attendees' | 'both'
+    setFinalizeOnlyLoading(step); setFinalizeOnlyMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const rpcMap = {
+        meetings:  'hs_finalize_meetings_only',
+        attendees: 'hs_finalize_meeting_attendees',
+      };
+      const steps = step === 'both' ? ['meetings', 'attendees'] : [step];
+      const results = {};
+
+      for (const s of steps) {
+        const res = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_${s === 'meetings' ? 'meetings_only' : 'meeting_attendees'}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authH },
+          body: JSON.stringify({ _rpc: rpcMap[s] }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setFinalizeOnlyMsg({ type: 'error', text: `${s} finalize failed: ${j.error || j.stats?.error || res.status}` });
+          return;
+        }
+        results[s] = j.stats || j;
+      }
+
+      const parts = [];
+      if (results.meetings) parts.push(`${results.meetings.meetings?.toLocaleString() ?? 0} meetings promoted${results.meetings.staging_cleared === false ? ' (staging NOT cleared — 0 rows)' : ''}`);
+      if (results.attendees) parts.push(`${results.attendees.attendees?.toLocaleString() ?? 0} attendees linked${results.attendees.staging_cleared === false ? ' ⚠ staging NOT cleared (0 rows — check meeting IDs match)' : ''}`);
+      setFinalizeOnlyMsg({ type: results.attendees?.staging_cleared === false || results.meetings?.staging_cleared === false ? 'warn' : 'success', text: parts.join(', ') + '.' });
+    } catch (e) {
+      setFinalizeOnlyMsg({ type: 'error', text: e.message || 'Finalize failed.' });
+    } finally {
+      setFinalizeOnlyLoading(null);
+    }
+  }
+
   function onMeetingCsvFile(key, file) {
     if (!file) return;
     const reader = new FileReader();
@@ -777,8 +816,8 @@ export default function Admin() {
         await truncateAndInsert('hs_raw_meeting_attendees', rows, 'engagement_meeting_attendees.csv', setProgress);
       }
 
-      // Finalize — run the RPC that promotes staging → production
-      setProgress('Finalising meeting data…');
+      // Finalize step 1 — promote meetings (fast, ~6k rows)
+      setProgress('Finalising meetings (step 1 of 2)…');
       const finalRes = await fetch(`${WORKER_URL}/admin/hs-ingest?table=finalize_meetings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authH },
@@ -786,7 +825,8 @@ export default function Admin() {
       });
       const finalJson = await finalRes.json().catch(() => ({}));
       if (!finalRes.ok) {
-        setMeetingIngestError(`Finalize failed: ${finalJson.error || finalRes.status}`);
+        const stepLabel = finalJson.step === 'attendees' ? 'attendees finalize' : 'meetings finalize';
+        setMeetingIngestError(`${stepLabel} failed: ${finalJson.stats?.error || finalRes.status}`);
         return;
       }
 
@@ -2233,6 +2273,53 @@ export default function Admin() {
                 <span style={{ marginLeft: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
                   Large files may take 1–2 minutes
                 </span>
+              </div>
+
+              {/* Standalone finalize controls — useful when staging has data but finalize failed */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>
+                  Re-run finalize only
+                </div>
+                <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: '#64748b' }}>
+                  If you've already uploaded the CSVs but the finalize step failed or returned 0 rows, run the steps individually without re-uploading.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8125rem' }}
+                    onClick={() => runFinalizeOnly('meetings')}
+                    disabled={!!finalizeOnlyLoading}
+                  >
+                    {finalizeOnlyLoading === 'meetings' ? 'Running…' : 'Finalize meetings'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.8125rem' }}
+                    onClick={() => runFinalizeOnly('attendees')}
+                    disabled={!!finalizeOnlyLoading}
+                  >
+                    {finalizeOnlyLoading === 'attendees' ? 'Running…' : 'Finalize attendees'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: '0.8125rem' }}
+                    onClick={() => runFinalizeOnly('both')}
+                    disabled={!!finalizeOnlyLoading}
+                  >
+                    {finalizeOnlyLoading === 'both' ? 'Running…' : 'Finalize both'}
+                  </button>
+                </div>
+                {finalizeOnlyMsg && (
+                  <div
+                    className={`alert ${finalizeOnlyMsg.type === 'error' ? 'alert-error' : finalizeOnlyMsg.type === 'warn' ? 'alert-warning' : 'alert-success'}`}
+                    style={{ marginTop: '10px' }}
+                  >
+                    {finalizeOnlyMsg.text}
+                  </div>
+                )}
               </div>
             </div>
           )}
