@@ -162,52 +162,67 @@ function OrgMeetingIntelligence({ token }) {
         {/* KPI stat row — top 3 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}>
           {/* Meetings MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-              {mtdThis ?? '—'}
-              <DeltaBadge value={mtgDelta} />
+          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Meetings recorded</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{mtdLast ?? '—'}</div>
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
+                  {mtdThis ?? '—'}<DeltaBadge value={mtgDelta} />
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Meetings recorded</div>
-            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
-              <span style={{ color: '#94a3b8' }}>vs</span>
-              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{mtdLast != null ? ` (${mtdLast})` : ''}</span>
-            </div>
-            <div style={{ marginTop: '10px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
               <SparkBar data={recentMonths} valueKey="count" color="#7c3aed" />
             </div>
           </div>
 
           {/* Active reps — MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-              {rateThis != null ? `${rateThis}%` : '—'}
-              <DeltaBadge value={rateDelta} suffix="%" />
+          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Reps actively recording (2+ meetings)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{rateLast != null ? `${rateLast}%` : '—'}</div>
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
+                  {rateThis != null ? `${rateThis}%` : '—'}<DeltaBadge value={rateDelta} suffix="%" />
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Reps actively recording (2+ meetings)</div>
-            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
-              <span style={{ color: '#94a3b8' }}>vs</span>
-              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{rateLast != null ? ` (${rateLast}%)` : ''}</span>
-            </div>
-            <div style={{ marginTop: '10px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
               <SparkBar data={recentRates} valueKey="pct" color="#2563eb" maxOverride={100} />
             </div>
           </div>
 
           {/* Avg talk ratio — MTD */}
-          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, lineHeight: 1, color: talkRatioColor(talkThis) }}>
-              {talkThis != null ? `${talkThis}%` : '—'}
-              <DeltaBadge value={talkDelta} suffix="%" />
+          <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Avg internal talk ratio</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#94a3b8', marginBottom: '2px' }}>{lastPeriod}</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#94a3b8' }}>{talkLast != null ? `${talkLast}%` : '—'}</div>
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '1rem' }}>→</div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{thisPeriod}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: talkRatioColor(talkThis), lineHeight: 1 }}>
+                  {talkThis != null ? `${talkThis}%` : '—'}<DeltaBadge value={talkDelta} suffix="%" />
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', fontWeight: 500 }}>Avg internal talk ratio</div>
-            <div style={{ fontSize: '0.7rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-              <span style={{ background: '#ede9fe', color: '#7c3aed', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>{thisPeriod}</span>
-              <span style={{ color: '#94a3b8' }}>vs</span>
-              <span style={{ background: '#f1f5f9', color: '#64748b', fontWeight: 600, padding: '1px 6px', borderRadius: '4px' }}>{lastPeriod}{talkLast != null ? ` (${talkLast}%)` : ' · available after scraping'}</span>
+            <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '4px', textAlign: 'right' }}>
+              Target: 40–60% · available after scraping
             </div>
-            <div style={{ marginTop: '10px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '6px' }}>
               <SparkBar data={recentTalk} valueKey="avg_internal_talk_pct" color={talkRatioColor(talkThis)} maxOverride={100} />
             </div>
           </div>
