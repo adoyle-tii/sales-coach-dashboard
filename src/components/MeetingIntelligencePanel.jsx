@@ -87,6 +87,17 @@ function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride, labelFn }) {
                 alignSelf: 'flex-end',
               }}
             />
+            {/* Month label below bar — e.g. "Feb", "Mar" */}
+            <div style={{
+              fontSize: '0.5rem',
+              color: isLast ? color : '#94a3b8',
+              fontWeight: isLast ? 700 : 400,
+              textAlign: 'center',
+              marginTop: '2px',
+              whiteSpace: 'nowrap',
+            }}>
+              {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt((data[i].month || '').slice(5), 10) - 1] || ''}
+            </div>
           </div>
         );
       })}
