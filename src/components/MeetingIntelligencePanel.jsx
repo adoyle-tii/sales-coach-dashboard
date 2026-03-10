@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
-
+// v2 — yearly/quarterly stats, full pagination support
 
 // ── Mini bar sparkline (6-month trend) ──────────────────────────────────────
 
