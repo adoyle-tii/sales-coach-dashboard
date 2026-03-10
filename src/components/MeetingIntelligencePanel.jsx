@@ -214,6 +214,68 @@ function OrgMeetingIntelligence({ token }) {
           ))}
         </div>
 
+        {/* Rep engagement panels — MTD breakdown + YTD */}
+        {(data.total_team_reps != null) && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
+
+            {/* Panel 1 — This month (MTD) breakdown */}
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px 16px' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#15803d', marginBottom: '10px' }}>
+                Rep activity — {thisPeriod}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#16a34a', lineHeight: 1 }}>{data.mtd_active_reps ?? 0}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>active<br/>(2+ meetings)</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
+                </div>
+                <div style={{ height: '1px', background: '#bbf7d0' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#d97706', lineHeight: 1 }}>{data.mtd_low_reps ?? 0}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#92400e', fontWeight: 500 }}>low activity<br/>(1 meeting)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#dc2626', lineHeight: 1 }}>{data.mtd_inactive_reps ?? 0}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#991b1b', fontWeight: 500 }}>no meetings<br/>recorded</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel 2 — YTD rep engagement */}
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px 16px' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#1d4ed8', marginBottom: '10px' }}>
+                Rep engagement — YTD {data.current_year ?? new Date().getFullYear()}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>{data.reps_with_meetings_ytd ?? '—'}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>recording<br/>meetings YTD</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
+                </div>
+                {data.total_team_reps > 0 && data.reps_with_meetings_ytd != null && (
+                  <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
+                    <div style={{
+                      height: '100%', borderRadius: '3px', background: '#2563eb',
+                      width: `${Math.round((data.reps_with_meetings_ytd / data.total_team_reps) * 100)}%`,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                )}
+                <div style={{ height: '1px', background: '#bfdbfe' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_no_meetings_ytd ?? '—'}</span>
+                  <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>never recorded<br/>a meeting {data.current_year ?? ''}</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
         {/* YTD total + quarterly breakdown */}
         {(data.ytd_meetings != null || data.meetings_by_quarter?.length > 0) && (
           <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
