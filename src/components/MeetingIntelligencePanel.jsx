@@ -17,7 +17,7 @@ function SparkBar({ data, valueKey, color = '#7c3aed', maxOverride }) {
           title={`${data[i].month}: ${v}`}
           style={{
             flex: 1,
-            background: i === 0 ? color : `${color}66`,
+            background: i === values.length - 1 ? color : `${color}66`,
             height: `${Math.max(4, Math.round((v / max) * 32))}px`,
             borderRadius: '2px 2px 0 0',
             transition: 'height 0.3s',
@@ -100,10 +100,10 @@ function OrgMeetingIntelligence({ token }) {
   const talkArr  = data.avg_talk_ratio_by_month || [];
   const mtgArr   = data.meetings_by_month || [];
 
-  // Sparkbars reversed so newest bar is leftmost
-  const recentMonths = mtgArr.slice(-6).reverse();
-  const recentRates  = rateArr.slice(-6).reverse();
-  const recentTalk   = talkArr.slice(-6).reverse();
+  // Sparkbars oldest → newest left to right (shows adoption growth trajectory)
+  const recentMonths = mtgArr.slice(-6);
+  const recentRates  = rateArr.slice(-6);
+  const recentTalk   = talkArr.slice(-6);
 
   // MTD values — all like-for-like (same day range this month vs last month)
   const mtdThis     = data.mtd_this_month          ?? null;
