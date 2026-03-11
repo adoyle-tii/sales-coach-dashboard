@@ -169,16 +169,24 @@ export default function Team() {
                   }
                   setAvailableRegions(regionList);
                 }
-                // Build manager_id → region_id map so we can filter direct reports
-                // (who are leaders/managers) by the region their team belongs to.
+                // Build a person → region_id map for filtering direct reports.
+                // Two sources:
+                //   1. teams.manager_id → teams.region_id  (managers/leaders who own a team)
+                //   2. regions.rvp_id → regions.id          (senior_leaders/RVPs who own a region)
                 const { data: teamsData } = await supabase.from('teams').select('id, manager_id, region_id');
+                const map = {};
                 if (teamsData) {
-                  const map = {};
                   for (const t of teamsData) {
                     if (t.region_id && t.manager_id) map[t.manager_id] = t.region_id;
                   }
-                  setTeamRegionMap(map);
                 }
+                // For executives: their direct reports are RVPs, who are mapped via regions.rvp_id
+                if (regionList.length > 0) {
+                  for (const reg of regionList) {
+                    if (reg.rvp_id && !map[reg.rvp_id]) map[reg.rvp_id] = reg.id;
+                  }
+                }
+                setTeamRegionMap(map);
               } catch { /* non-critical */ }
             })();
           }
