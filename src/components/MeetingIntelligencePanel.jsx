@@ -258,7 +258,7 @@ function OrgMeetingIntelligence({ token, regionId, regionIds }) {
               labelFn: (d) => d.count != null ? String(d.count) : null,
             },
             {
-              label: 'Reps actively recording (2+ meetings)',
+              label: 'Reps attending meetings (2+)',
               thisVal: rateThis != null ? `${rateThis}%` : '—',
               lastVal: rateLast != null ? `${rateLast}%` : '—',
               delta: rateDelta, deltaSuffix: '%',
@@ -300,9 +300,9 @@ function OrgMeetingIntelligence({ token, regionId, regionIds }) {
           ))}
         </div>
 
-        {/* Rep engagement panels — MTD breakdown + YTD */}
+        {/* Rep engagement panels — MTD breakdown + YTD attending + YTD hosting */}
         {(data.total_team_reps != null) && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
 
             {/* Panel 1 — This month (MTD) breakdown */}
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px 16px' }}>
@@ -332,16 +332,16 @@ function OrgMeetingIntelligence({ token, regionId, regionIds }) {
               </div>
             </div>
 
-            {/* Panel 2 — YTD rep engagement */}
+            {/* Panel 2 — YTD reps attending meetings */}
             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px 16px' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#1d4ed8', marginBottom: '10px' }}>
-                Rep engagement — YTD {data.current_year ?? new Date().getFullYear()}
+                Reps attending — YTD {data.current_year ?? new Date().getFullYear()}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>{data.reps_with_meetings_ytd ?? '—'}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                    <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>attending<br/>meetings YTD</span>
                   </div>
                   <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
                 </div>
@@ -357,9 +357,42 @@ function OrgMeetingIntelligence({ token, regionId, regionIds }) {
               <div style={{ height: '1px', background: '#bfdbfe' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_no_meetings_ytd ?? '—'}</span>
-                <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>not hosted<br/>a meeting {data.current_year ?? ''}</span>
+                <span style={{ fontSize: '0.72rem', color: (data.reps_no_meetings_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>not attended<br/>a meeting {data.current_year ?? ''}</span>
               </div>
               <RepListDrawer list={data.reps_no_meetings_ytd_list} color="#dc2626" />
+              </div>
+            </div>
+
+            {/* Panel 3 — YTD reps hosting meetings */}
+            <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '14px 16px' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#7c3aed', marginBottom: '10px' }}>
+                Reps hosting — YTD {data.current_year ?? new Date().getFullYear()}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>{data.reps_hosting_ytd ?? '—'}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#6d28d9', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>of {data.total_team_reps}</span>
+                </div>
+              {data.total_team_reps > 0 && data.reps_hosting_ytd != null && (
+                <div style={{ height: '6px', borderRadius: '3px', background: '#e9d5ff', overflow: 'hidden', margin: '2px 0' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '3px', background: '#7c3aed',
+                    width: `${Math.round((data.reps_hosting_ytd / data.total_team_reps) * 100)}%`,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
+              <div style={{ height: '1px', background: '#e9d5ff' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (data.reps_not_hosting_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>{data.reps_not_hosting_ytd ?? '—'}</span>
+                <span style={{ fontSize: '0.72rem', color: (data.reps_not_hosting_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>not hosted<br/>a meeting {data.current_year ?? ''}</span>
+              </div>
+              <RepListDrawer list={data.reps_not_hosting_ytd_list} color="#dc2626" />
+              <div style={{ height: '1px', background: '#e9d5ff' }} />
+              <RepListDrawer list={data.reps_hosting_ytd_list} color="#7c3aed" />
               </div>
             </div>
 
@@ -457,7 +490,7 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
       labelFn: (d) => d.count != null ? String(d.count) : null,
     },
     {
-      label: 'Reps actively recording (2+)',
+      label: 'Reps attending meetings (2+)',
       thisVal: s.mtd_rep_rate_this_month != null ? `${s.mtd_rep_rate_this_month}%` : '—',
       lastVal: s.mtd_rep_rate_last_month != null ? `${s.mtd_rep_rate_last_month}%` : '—',
       delta: s.mtd_rep_rate_this_month != null && s.mtd_rep_rate_last_month != null ? Math.round((s.mtd_rep_rate_this_month - s.mtd_rep_rate_last_month) * 10) / 10 : null,
@@ -506,8 +539,8 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
           ))}
         </div>
 
-        {/* Rep engagement panels — MTD breakdown + YTD */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '16px' }}>
+        {/* Rep engagement panels — MTD breakdown + YTD attending + YTD hosting */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
 
           {/* Panel 1 — This month (MTD) breakdown */}
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px 16px' }}>
@@ -549,25 +582,23 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
             </div>
           </div>
 
-          {/* Panel 2 — YTD rep engagement */}
+          {/* Panel 2 — YTD reps attending meetings */}
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px 16px' }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#1d4ed8', marginBottom: '10px' }}>
-              Rep engagement — YTD {s.current_year ?? new Date().getFullYear()}
+              Reps attending — YTD {s.current_year ?? new Date().getFullYear()}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              {/* Reps with any meeting YTD */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563eb', lineHeight: 1 }}>
                     {s.reps_with_meetings_ytd ?? '—'}
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                  <span style={{ fontSize: '0.72rem', color: '#1d4ed8', fontWeight: 600 }}>attending<br/>meetings YTD</span>
                 </div>
                 <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>
                   of {s.total_team_reps ?? '—'}
                 </span>
               </div>
-              {/* Progress bar */}
               {s.total_team_reps > 0 && s.reps_with_meetings_ytd != null && (
                 <div style={{ height: '6px', borderRadius: '3px', background: '#bfdbfe', overflow: 'hidden', margin: '2px 0' }}>
                   <div style={{
@@ -578,16 +609,56 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
                 </div>
               )}
               <div style={{ height: '1px', background: '#bfdbfe' }} />
-              {/* Reps with zero meetings YTD */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '1.2rem', fontWeight: 700, color: s.reps_no_meetings_ytd > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>
                   {s.reps_no_meetings_ytd ?? '—'}
                 </span>
                 <span style={{ fontSize: '0.72rem', color: s.reps_no_meetings_ytd > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>
-                  not hosted<br/>a meeting {s.current_year ?? ''}
+                  not attended<br/>a meeting {s.current_year ?? ''}
                 </span>
               </div>
               <RepListDrawer list={s.reps_no_meetings_ytd_list} color="#dc2626" />
+            </div>
+          </div>
+
+          {/* Panel 3 — YTD reps hosting meetings */}
+          <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '10px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#7c3aed', marginBottom: '10px' }}>
+              Reps hosting — YTD {s.current_year ?? new Date().getFullYear()}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>
+                    {s.reps_hosting_ytd ?? '—'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#6d28d9', fontWeight: 600 }}>hosting<br/>meetings YTD</span>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '99px', padding: '2px 8px', fontWeight: 600 }}>
+                  of {s.total_team_reps ?? '—'}
+                </span>
+              </div>
+              {s.total_team_reps > 0 && s.reps_hosting_ytd != null && (
+                <div style={{ height: '6px', borderRadius: '3px', background: '#e9d5ff', overflow: 'hidden', margin: '2px 0' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '3px', background: '#7c3aed',
+                    width: `${Math.round((s.reps_hosting_ytd / s.total_team_reps) * 100)}%`,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
+              <div style={{ height: '1px', background: '#e9d5ff' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700, color: (s.reps_not_hosting_ytd ?? 0) > 0 ? '#dc2626' : '#94a3b8', lineHeight: 1 }}>
+                  {s.reps_not_hosting_ytd ?? '—'}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: (s.reps_not_hosting_ytd ?? 0) > 0 ? '#991b1b' : '#94a3b8', fontWeight: 500 }}>
+                  not hosted<br/>a meeting {s.current_year ?? ''}
+                </span>
+              </div>
+              <RepListDrawer list={s.reps_not_hosting_ytd_list} color="#dc2626" />
+              <div style={{ height: '1px', background: '#e9d5ff' }} />
+              <RepListDrawer list={s.reps_hosting_ytd_list} color="#7c3aed" />
             </div>
           </div>
 

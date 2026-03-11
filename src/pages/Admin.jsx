@@ -922,6 +922,41 @@ export default function Admin() {
   }
 
   const [resettingStuck, setResettingStuck] = useState(false);
+
+  // Rogue meetings review
+  const [rogueOpen, setRogueOpen] = useState(false);
+  const [rogueMeetings, setRogueMeetings] = useState([]);
+  const [rogueLoading, setRogueLoading] = useState(false);
+  const [rogueTogglingId, setRogueTogglingId] = useState(null);
+
+  async function loadRogueMeetings() {
+    setRogueLoading(true);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/meetings/rogue`, {
+        headers: { 'Content-Type': 'application/json', ...authH },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setRogueMeetings(j.meetings || []);
+      }
+    } catch (e) { console.error('Failed to load rogue meetings:', e); }
+    finally { setRogueLoading(false); }
+  }
+
+  async function toggleRogue(meetingId, newIsRogue) {
+    setRogueTogglingId(meetingId);
+    try {
+      const authH = await getAuthHeaders();
+      await fetch(`${WORKER_URL}/admin/meetings/rogue/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: JSON.stringify({ meeting_id: meetingId, is_rogue: newIsRogue }),
+      });
+      setRogueMeetings((prev) => prev.filter((m) => m.hs_meeting_id !== meetingId));
+    } catch (e) { console.error('Failed to toggle rogue:', e); }
+    finally { setRogueTogglingId(null); }
+  }
   async function resetStuck() {
     setResettingStuck(true); setResetMsg(null);
     try {
@@ -2756,6 +2791,98 @@ export default function Admin() {
           </div>
         );
       })()}
+
+      {/* ================================================================
+          Flagged (Rogue) Meetings — admin review
+          ================================================================ */}
+      {isSuperadmin && (
+        <div className="card section">
+          <div
+            className="card-header"
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => { setRogueOpen((v) => !v); if (!rogueOpen && rogueMeetings.length === 0) loadRogueMeetings(); }}
+          >
+            <h2 className="card-title">Flagged meetings review</h2>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {rogueOpen ? '▲ collapse' : '▼ Review meetings excluded from reporting (high internal attendee ratio)'}
+            </span>
+          </div>
+
+          {rogueOpen && (
+            <div className="card-body">
+              <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '12px' }}>
+                These meetings were auto-flagged because they have 5+ internal attendees that outnumber external attendees —
+                likely internal team calls, all-hands, or customer events with many internal staff.
+                Click <strong>Include</strong> to un-flag a meeting and add it back to reporting.
+              </p>
+
+              {rogueLoading && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>}
+
+              {!rogueLoading && rogueMeetings.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No flagged meetings found.</div>
+              )}
+
+              {!rogueLoading && rogueMeetings.length > 0 && (
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ marginBottom: '8px', fontSize: '0.75rem', color: '#64748b' }}>
+                    {rogueMeetings.length} flagged meeting{rogueMeetings.length !== 1 ? 's' : ''}
+                  </div>
+                  <table className="data-table" style={{ fontSize: '0.8125rem' }}>
+                    <thead>
+                      <tr>
+                        <th>Meeting ID</th>
+                        <th>Date</th>
+                        <th>Host</th>
+                        <th>Internal</th>
+                        <th>External</th>
+                        <th>Ratio</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rogueMeetings.map((m) => {
+                        const total = m.internal_attendees + m.external_attendees;
+                        const ratio = total > 0 ? `${Math.round((m.internal_attendees / total) * 100)}% int.` : '—';
+                        return (
+                          <tr key={m.hs_meeting_id}>
+                            <td>
+                              <a href={`https://turnitin.highspot.com/engagement#meetings/${m.hs_meeting_id}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
+                                {m.hs_meeting_id}
+                              </a>
+                            </td>
+                            <td>{m.hs_created_at ? new Date(m.hs_created_at).toLocaleDateString() : '—'}</td>
+                            <td>{m.scraped_host_name || '—'}</td>
+                            <td style={{ color: '#dc2626', fontWeight: 600 }}>{m.internal_attendees}</td>
+                            <td>{m.external_attendees}</td>
+                            <td>{ratio}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ fontSize: '0.75rem', padding: '3px 10px' }}
+                                disabled={rogueTogglingId === m.hs_meeting_id}
+                                onClick={() => toggleRogue(m.hs_meeting_id, false)}
+                              >
+                                {rogueTogglingId === m.hs_meeting_id ? '…' : 'Include'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{ marginTop: '12px' }}>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: '0.8125rem' }} onClick={loadRogueMeetings} disabled={rogueLoading}>
+                  {rogueLoading ? 'Loading…' : '↻ Refresh'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ================================================================
           Meeting Intelligence ingest (engagement_meetings.csv +
