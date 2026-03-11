@@ -921,6 +921,24 @@ export default function Admin() {
     finally { setResettingFailed(false); }
   }
 
+  const [resettingStuck, setResettingStuck] = useState(false);
+  async function resetStuck() {
+    setResettingStuck(true); setResetMsg(null);
+    try {
+      const authH = await getAuthHeaders();
+      const res = await fetch(`${WORKER_URL}/admin/meetings/reset-stuck`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH },
+        body: '{}',
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setResetMsg({ type: 'error', text: j.error || 'Reset stuck failed.' }); return; }
+      setResetMsg({ type: 'success', text: `Reset ${j.reset ?? 'all'} stuck (in-progress) meetings to pending.` });
+      await loadScraperStatus();
+    } catch (e) { setResetMsg({ type: 'error', text: e.message }); }
+    finally { setResettingStuck(false); }
+  }
+
   // Auto-refresh scraper status every 30s when panel is open and toggle is on
   useEffect(() => {
     if (!scraperOpen || !scraperAutoRefresh) return;
@@ -2564,6 +2582,16 @@ export default function Admin() {
                         <div key={label} className="stat-card" style={{ background: bg, border: `1px solid ${color}22` }}>
                           <div className="stat-value" style={{ color, fontSize: '1.375rem' }}>{value.toLocaleString()}</div>
                           <div className="stat-label">{label}</div>
+                          {label === 'In progress' && value > 0 && (
+                            <button
+                              type="button"
+                              onClick={resetStuck}
+                              disabled={resettingStuck}
+                              style={{ marginTop: '6px', fontSize: '0.6875rem', padding: '2px 8px', background: '#b4530915', border: `1px solid ${color}44`, borderRadius: '4px', cursor: 'pointer', color }}
+                            >
+                              {resettingStuck ? 'Resetting…' : 'Reset to pending'}
+                            </button>
+                          )}
                         </div>
                       ) : null)}
                     </div>
