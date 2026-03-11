@@ -453,11 +453,13 @@ export default function Team() {
     const myRegionIds = availableRegions.map((r) => r.id);
     const hasRegionScope = !viewAsId && myRegionIds.length > 0;
 
-    // Apply region filter to directReports list (only when at top level, not drilled-in)
+    // Apply region filter to directReports list (only when at top level, not drilled-in).
+    // For RVPs (senior_leader): default "All regions" scopes to their assigned regions.
+    // For executives/admins: default "All regions" shows everything (no region filtering).
     const filteredDirectReports = !viewAsId
       ? regionFilterId
         ? directReports.filter((r) => teamRegionMap[r.id] === regionFilterId)
-        : myRegionIds.length > 0
+        : myRole === 'senior_leader' && myRegionIds.length > 0
           ? directReports.filter((r) => myRegionIds.includes(teamRegionMap[r.id]))
           : directReports
       : directReports;
@@ -515,7 +517,7 @@ export default function Team() {
               mode="org"
               token={authToken}
               regionId={regionFilterId || undefined}
-              regionIds={!regionFilterId && myRegionIds.length > 0 ? myRegionIds : undefined}
+              regionIds={!regionFilterId && myRole === 'senior_leader' && myRegionIds.length > 0 ? myRegionIds : undefined}
             />
         }
 
