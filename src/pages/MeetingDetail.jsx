@@ -44,6 +44,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
   }
 
   const norm = (s) => (s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  const totalLen = turnsWithLen.reduce((s, t) => s + t.len, 0) || 1;
 
   return (
     <div style={{
@@ -51,19 +52,21 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
       paddingBottom: '12px',
       marginBottom: '12px',
       borderBottom: '1px solid var(--slate-200)',
+      maxWidth: '100%',
+      overflow: 'hidden',
     }}>
       <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Meeting timeline
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
         {speakersOrdered.map((speaker) => {
           const isInternal = speakerToInternal(speaker);
           const segKey = norm(speaker) || 'unknown';
           const isRep = myTalkRatioName && norm(speaker) === norm(myTalkRatioName);
           const fill = isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : isInternal ? '#7c3aed' : '#94a3b8';
           return (
-            <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
-              <span style={{ minWidth: '100px', fontWeight: 500, color: 'var(--slate-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem', minWidth: 0 }}>
+              <span style={{ flexShrink: 0, width: '100px', fontWeight: 500, color: 'var(--slate-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {speaker || 'Unknown'}
                 {isRep && <span style={{ marginLeft: '4px', fontSize: '0.65rem', color: 'var(--brand)' }}>You</span>}
               </span>
@@ -74,11 +77,12 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                   display: 'flex',
                   gap: '2px',
                   minWidth: 0,
+                  overflow: 'hidden',
                 }}
               >
                 {turnsWithLen.map((t, i) => {
                   const isThisSpeaker = (norm(t.speaker) || 'unknown') === segKey;
-                  const flexGrow = Math.max(1, t.len);
+                  const widthPct = totalLen > 0 ? (t.len / totalLen) * 100 : 0;
                   return (
                     <button
                       key={i}
@@ -86,8 +90,8 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                       onClick={() => isThisSpeaker && onSegmentClick(i)}
                       title={isThisSpeaker ? `Turn ${i + 1}: ${(t.text || '').slice(0, 50)}...` : ''}
                       style={{
-                        flex: `${flexGrow} 0 0`,
-                        minWidth: 2,
+                        flex: `0 1 ${widthPct}%`,
+                        minWidth: 0,
                         height: '100%',
                         background: isThisSpeaker ? fill : 'transparent',
                         border: 'none',
@@ -153,7 +157,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
         </h2>
       </button>
       {transcriptOpen && (
-        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', padding: '16px 20px' }}>
+        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px' }}>
           {turns.length > 0 ? (
             <>
               <MeetingScrubber
