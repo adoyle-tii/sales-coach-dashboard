@@ -736,7 +736,7 @@ export function RepMeetingIntelligenceSummary({ userId }) {
         setLoading(false);
       }
     })();
-  }, [userId, token]);
+  }, [userId]);
 
   if (loading) return (
     <div className="card" style={{ marginBottom: '24px' }}>
