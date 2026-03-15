@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
@@ -19,6 +19,166 @@ function parseTranscriptLines(raw) {
     }
   }
   return result;
+}
+
+// Meeting scrubber: timeline bars per speaker, click segment to scroll to turn
+function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentClick }) {
+  if (!turns.length) return null;
+
+  const totalLen = turns.reduce((s, t) => s + (t.text?.length || 0), 0) || 1;
+  let cum = 0;
+  const turnsWithPos = turns.map((t, i) => {
+    const len = t.text?.length || 0;
+    const start = cum;
+    cum += len;
+    return { ...t, index: i, start, len };
+  });
+
+  const speakersOrdered = [];
+  const seen = new Set();
+  for (const t of turns) {
+    const key = (t.speaker || '').trim().toLowerCase();
+    const display = (t.speaker || '').trim() || 'Unknown';
+    if (!seen.has(key || 'unknown')) {
+      seen.add(key || 'unknown');
+      speakersOrdered.push(display);
+    }
+  }
+
+  const norm = (s) => (s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+
+  return (
+    <div style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 10,
+      background: 'white',
+      paddingBottom: '12px',
+      marginBottom: '12px',
+      borderBottom: '1px solid var(--slate-200)',
+    }}>
+      <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Meeting timeline
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {speakersOrdered.map((speaker) => {
+          const isInternal = speakerToInternal(speaker);
+          const segKey = norm(speaker) || 'unknown';
+          const segments = turnsWithPos.filter((t) => (norm(t.speaker) || 'unknown') === segKey);
+          const isRep = myTalkRatioName && norm(speaker) === norm(myTalkRatioName);
+          const fill = isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : isInternal ? '#7c3aed' : '#94a3b8';
+          return (
+            <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
+              <span style={{ minWidth: '100px', fontWeight: 500, color: 'var(--slate-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {speaker || 'Unknown'}
+                {isRep && <span style={{ marginLeft: '4px', fontSize: '0.65rem', color: 'var(--brand)' }}>You</span>}
+              </span>
+              <div style={{ flex: 1, height: 20, background: 'var(--slate-100)', borderRadius: '4px', overflow: 'hidden', display: 'flex', position: 'relative' }}>
+                {segments.map((seg, i) => {
+                  const leftPct = (seg.start / totalLen) * 100;
+                  const widthPct = Math.max(0.5, (seg.len / totalLen) * 100);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => onSegmentClick(seg.index)}
+                      title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
+                      style={{
+                        position: 'absolute',
+                        left: `${leftPct}%`,
+                        width: `${widthPct}%`,
+                        height: '100%',
+                        background: fill,
+                        border: 'none',
+                        cursor: 'pointer',
+                        opacity: 0.85,
+                        transition: 'opacity 0.15s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.85'; }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Transcript section with scrubber + chat bubbles
+function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcriptOpen, setTranscriptOpen }) {
+  const turnRefs = useRef([]);
+  const scrollContainerRef = useRef(null);
+
+  const turns = parseTranscriptLines(transcript);
+  const speakerToInternalMap = new Map();
+  for (const r of talkRatios || []) {
+    const key = (r.name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    if (key) speakerToInternalMap.set(key, !!r.isInternal);
+  }
+  const isInternalSpeaker = useCallback((name) => {
+    const key = (name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    if (speakerToInternalMap.has(key)) return speakerToInternalMap.get(key);
+    if (key) {
+      for (const [k, v] of speakerToInternalMap) {
+        if (k.includes(key) || key.includes(k)) return v;
+      }
+    }
+    return false;
+  }, [talkRatios]);
+
+  const scrollToTurn = useCallback((index) => {
+    const el = turnRefs.current[index];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
+
+  return (
+    <div className="card section">
+      <button
+        type="button"
+        onClick={() => setTranscriptOpen((o) => !o)}
+        className="card-header"
+        style={{ width: '100%', cursor: 'pointer', background: 'none', border: 'none', textAlign: 'left' }}
+      >
+        <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>{transcriptOpen ? '▾' : '▸'}</span>
+          Transcript
+        </h2>
+      </button>
+      {transcriptOpen && (
+        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', padding: '16px 20px' }}>
+          {turns.length > 0 ? (
+            <>
+              <MeetingScrubber
+                turns={turns}
+                speakerToInternal={isInternalSpeaker}
+                myTalkRatioName={myTalkRatioName}
+                onSegmentClick={scrollToTurn}
+              />
+              {turns.map((t, i) => (
+                <div key={i} ref={(el) => { turnRefs.current[i] = el; }}>
+                  <TranscriptBubble
+                    speaker={t.speaker}
+                    text={t.text}
+                    isInternal={isInternalSpeaker(t.speaker)}
+                  />
+                </div>
+              ))}
+            </>
+          ) : (
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
+              {transcript}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Chat-style bubble for transcript (internal vs external)
@@ -290,57 +450,15 @@ export default function MeetingDetail() {
         </div>
       )}
 
-      {/* Transcript (chat format: internal vs external) */}
+      {/* Transcript (scrubber + chat format) */}
       {transcript && (
-        <div className="card section">
-          <button
-            type="button"
-            onClick={() => setTranscriptOpen((o) => !o)}
-            className="card-header"
-            style={{ width: '100%', cursor: 'pointer', background: 'none', border: 'none', textAlign: 'left' }}
-          >
-            <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>{transcriptOpen ? '▾' : '▸'}</span>
-              Transcript
-            </h2>
-          </button>
-          {transcriptOpen && (
-            <div className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', padding: '16px 20px' }}>
-              {(() => {
-                const turns = parseTranscriptLines(transcript);
-                const speakerToInternal = new Map();
-                for (const r of talkRatios) {
-                  const key = (r.name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-                  if (key) speakerToInternal.set(key, !!r.isInternal);
-                }
-                const isInternalSpeaker = (name) => {
-                  const key = (name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-                  if (speakerToInternal.has(key)) return speakerToInternal.get(key);
-                  if (key) {
-                    for (const [k, v] of speakerToInternal) {
-                      if (k.includes(key) || key.includes(k)) return v;
-                    }
-                  }
-                  return false;
-                };
-                return turns.length > 0 ? (
-                  turns.map((t, i) => (
-                    <TranscriptBubble
-                      key={i}
-                      speaker={t.speaker}
-                      text={t.text}
-                      isInternal={isInternalSpeaker(t.speaker)}
-                    />
-                  ))
-                ) : (
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
-                    {transcript}
-                  </pre>
-                );
-              })()}
-            </div>
-          )}
-        </div>
+        <TranscriptSection
+          transcript={transcript}
+          talkRatios={talkRatios}
+          myTalkRatioName={my_talk_ratio?.name}
+          transcriptOpen={transcriptOpen}
+          setTranscriptOpen={setTranscriptOpen}
+        />
       )}
     </div>
   );
