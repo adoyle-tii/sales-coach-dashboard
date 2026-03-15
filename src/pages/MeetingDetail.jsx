@@ -28,23 +28,16 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
 
   let cum = 0;
   const turnsWithPos = turns.map((t, i) => {
-    const len = Math.max(1, t.text?.length || 0);
+    const len = t.text?.length || 0;
     const start = cum;
     cum += len;
     return { ...t, index: i, len, start };
   });
   const totalLen = cum || 1;
-  const n = turnsWithPos.length;
-  const gapPct = n > 1 ? Math.min(0.3, 10 / (n - 1)) : 0;
-  const segmentSpace = 100 - (n - 1) * gapPct;
-  let cumLeft = 0;
-  const overlapBuffer = 0.04;
-  const turnsWithLayout = turnsWithPos.map((t, i) => {
-    const rawWidth = (t.len / totalLen) * segmentSpace;
-    const widthPct = Math.max(0.2, rawWidth - overlapBuffer);
-    const leftPct = cumLeft;
-    cumLeft += rawWidth + gapPct;
-    return { ...t, leftPct, widthPct };
+  const turnsWithLayout = turnsWithPos.map((t) => {
+    const turnPct = totalLen > 0 ? (t.len / totalLen) * 100 : 0;
+    const leftPct = totalLen > 0 ? (t.start / totalLen) * 100 : 0;
+    return { ...t, leftPct, widthPct: turnPct };
   });
 
   const speakersOrdered = [];
