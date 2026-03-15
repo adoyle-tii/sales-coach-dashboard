@@ -90,15 +90,18 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                 }}
               >
                 {segments.map((seg, i) => (
-                  <button
+                  <div
                     key={i}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSegmentClick(seg.index)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSegmentClick(seg.index); } }}
                     title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
                     style={{
                       position: 'absolute',
                       left: `${seg.leftPct}%`,
                       width: `${seg.widthPct}%`,
+                      minWidth: 0,
                       top: 0,
                       bottom: 0,
                       background: fill,
