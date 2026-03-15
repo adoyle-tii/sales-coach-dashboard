@@ -21,16 +21,19 @@ function parseTranscriptLines(raw) {
   return result;
 }
 
-// Meeting scrubber: one column per turn (width = turn length), each row shows only that speaker's turns.
-// At any moment only the person speaking has a filled segment; others have gaps.
+// Meeting scrubber: segments sized by character count, absolute positioning for accurate proportions.
+// Each row: only the speaker's turns are filled; others show gaps.
 function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentClick }) {
   if (!turns.length) return null;
 
-  const turnsWithLen = turns.map((t, i) => ({
-    ...t,
-    index: i,
-    len: t.text?.length || 0,
-  }));
+  let cum = 0;
+  const turnsWithPos = turns.map((t, i) => {
+    const len = Math.max(1, t.text?.length || 0);
+    const start = cum;
+    cum += len;
+    return { ...t, index: i, len, start };
+  });
+  const totalLen = cum || 1;
 
   const speakersOrdered = [];
   const seen = new Set();
@@ -44,7 +47,6 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
   }
 
   const norm = (s) => (s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-  const totalLen = turnsWithLen.reduce((s, t) => s + t.len, 0) || 1;
 
   return (
     <div style={{
@@ -52,20 +54,21 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
       paddingBottom: '12px',
       marginBottom: '12px',
       borderBottom: '1px solid var(--slate-200)',
-      maxWidth: '100%',
-      overflow: 'hidden',
+      width: '100%',
+      boxSizing: 'border-box',
     }}>
       <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Meeting timeline
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {speakersOrdered.map((speaker) => {
           const isInternal = speakerToInternal(speaker);
           const segKey = norm(speaker) || 'unknown';
           const isRep = myTalkRatioName && norm(speaker) === norm(myTalkRatioName);
           const fill = isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : isInternal ? '#7c3aed' : '#94a3b8';
+          const segments = turnsWithPos.filter((t) => (norm(t.speaker) || 'unknown') === segKey);
           return (
-            <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem', minWidth: 0 }}>
+            <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
               <span style={{ flexShrink: 0, width: '100px', fontWeight: 500, color: 'var(--slate-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {speaker || 'Unknown'}
                 {isRep && <span style={{ marginLeft: '4px', fontSize: '0.65rem', color: 'var(--brand)' }}>You</span>}
@@ -74,34 +77,37 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                 style={{
                   flex: 1,
                   height: 20,
-                  display: 'flex',
-                  gap: '2px',
+                  position: 'relative',
                   minWidth: 0,
+                  background: 'var(--slate-100)',
+                  borderRadius: '4px',
                   overflow: 'hidden',
                 }}
               >
-                {turnsWithLen.map((t, i) => {
-                  const isThisSpeaker = (norm(t.speaker) || 'unknown') === segKey;
-                  const widthPct = totalLen > 0 ? (t.len / totalLen) * 100 : 0;
+                {segments.map((seg, i) => {
+                  const leftPct = (seg.start / totalLen) * 100;
+                  const widthPct = (seg.len / totalLen) * 100;
                   return (
                     <button
                       key={i}
                       type="button"
-                      onClick={() => isThisSpeaker && onSegmentClick(i)}
-                      title={isThisSpeaker ? `Turn ${i + 1}: ${(t.text || '').slice(0, 50)}...` : ''}
+                      onClick={() => onSegmentClick(seg.index)}
+                      title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
                       style={{
-                        flex: `0 1 ${widthPct}%`,
-                        minWidth: 0,
-                        height: '100%',
-                        background: isThisSpeaker ? fill : 'transparent',
+                        position: 'absolute',
+                        left: `${leftPct}%`,
+                        width: `${widthPct}%`,
+                        top: 0,
+                        bottom: 0,
+                        background: fill,
                         border: 'none',
-                        cursor: isThisSpeaker ? 'pointer' : 'default',
-                        opacity: isThisSpeaker ? 0.9 : 0,
+                        cursor: 'pointer',
+                        opacity: 0.9,
                         transition: 'opacity 0.15s',
                         borderRadius: '2px',
                       }}
-                      onMouseEnter={(e) => { if (isThisSpeaker) e.currentTarget.style.opacity = '1'; }}
-                      onMouseLeave={(e) => { if (isThisSpeaker) e.currentTarget.style.opacity = '0.9'; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.9'; }}
                     />
                   );
                 })}
@@ -144,7 +150,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
   }, []);
 
   return (
-    <div className="card section">
+    <div className="card section" style={{ overflow: 'hidden' }}>
       <button
         type="button"
         onClick={() => setTranscriptOpen((o) => !o)}
@@ -157,7 +163,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
         </h2>
       </button>
       {transcriptOpen && (
-        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px' }}>
+        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px', width: '100%', boxSizing: 'border-box' }}>
           {turns.length > 0 ? (
             <>
               <MeetingScrubber
@@ -167,7 +173,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
                 onSegmentClick={scrollToTurn}
               />
               {turns.map((t, i) => (
-                <div key={i} ref={(el) => { turnRefs.current[i] = el; }}>
+                <div key={i} ref={(el) => { turnRefs.current[i] = el; }} style={{ scrollMarginTop: '12px' }}>
                   <TranscriptBubble
                     speaker={t.speaker}
                     text={t.text}
@@ -300,7 +306,7 @@ export default function MeetingDetail() {
   };
 
   return (
-    <div style={{ maxWidth: '900px' }}>
+    <div style={{ maxWidth: '900px', width: '100%', overflow: 'hidden' }}>
       <Link to={backLink} className="back-link">{backLabel}</Link>
 
       {/* Header */}
