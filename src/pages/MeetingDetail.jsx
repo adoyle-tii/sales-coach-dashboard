@@ -57,8 +57,6 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
     <div style={{
       background: 'white',
       paddingBottom: '12px',
-      marginBottom: '12px',
-      borderBottom: '1px solid var(--slate-200)',
       width: '100%',
       boxSizing: 'border-box',
     }}>
@@ -167,29 +165,45 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
         </h2>
       </button>
       {transcriptOpen && (
-        <div ref={scrollContainerRef} className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'hidden', padding: '16px 20px', width: '100%', boxSizing: 'border-box' }}>
+        <div className="card-body" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
           {turns.length > 0 ? (
             <>
-              <MeetingScrubber
-                turns={turns}
-                speakerToInternal={isInternalSpeaker}
-                myTalkRatioName={myTalkRatioName}
-                onSegmentClick={scrollToTurn}
-              />
-              {turns.map((t, i) => (
-                <div key={i} ref={(el) => { turnRefs.current[i] = el; }} style={{ scrollMarginTop: '12px' }}>
-                  <TranscriptBubble
-                    speaker={t.speaker}
-                    text={t.text}
-                    isInternal={isInternalSpeaker(t.speaker)}
-                  />
-                </div>
-              ))}
+              <div style={{ flexShrink: 0, padding: '16px 20px 0', borderBottom: '1px solid var(--slate-200)' }}>
+                <MeetingScrubber
+                  turns={turns}
+                  speakerToInternal={isInternalSpeaker}
+                  myTalkRatioName={myTalkRatioName}
+                  onSegmentClick={scrollToTurn}
+                />
+              </div>
+              <div
+                ref={scrollContainerRef}
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  maxHeight: '450px',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  padding: '16px 20px',
+                }}
+              >
+                {turns.map((t, i) => (
+                  <div key={i} ref={(el) => { turnRefs.current[i] = el; }} style={{ scrollMarginTop: '12px' }}>
+                    <TranscriptBubble
+                      speaker={t.speaker}
+                      text={t.text}
+                      isInternal={isInternalSpeaker(t.speaker)}
+                    />
+                  </div>
+                ))}
+              </div>
             </>
           ) : (
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
-              {transcript}
-            </pre>
+            <div style={{ padding: '16px 20px' }}>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
+                {transcript}
+              </pre>
+            </div>
           )}
         </div>
       )}
@@ -329,12 +343,12 @@ export default function MeetingDetail() {
         </div>
       </div>
 
-      {/* Attendees (only those who attended) */}
+      {/* Attendees & Speaking time (combined) */}
       <div className="card section">
         <div className="card-header">
-          <h2 className="card-title">Attendees</h2>
+          <h2 className="card-title">Attendees & speaking time</h2>
         </div>
-        <div className="card-body-tight">
+        <div className="card-body">
           {attendedOnly.length === 0 ? (
             <div className="empty-state" style={{ padding: '16px 0' }}>No attendees recorded.</div>
           ) : (
@@ -344,25 +358,55 @@ export default function MeetingDetail() {
                   <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: 600, color: 'var(--slate-600)' }}>Name</th>
                   <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: 600, color: 'var(--slate-600)' }}>Email</th>
                   <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: 600, color: 'var(--slate-600)' }}>Badges</th>
+                  <th style={{ textAlign: 'right', padding: '10px 14px', fontWeight: 600, color: 'var(--slate-600)' }}>Speaking</th>
                 </tr>
               </thead>
               <tbody>
-                {attendedOnly.map((a) => (
-                  <tr key={a.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
-                    <td style={{ padding: '10px 14px', fontWeight: 500 }}>{a.display_name || a.email || '—'}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--slate-600)' }}>{a.email || '—'}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {a.is_conference_call_host && (
-                          <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8', fontWeight: 500 }}>Host</span>
+                {attendedOnly.map((a) => {
+                  const aName = ((a.display_name || a.email || '') + '').trim().toLowerCase();
+                  const ratio = talkRatios.find((r) => {
+                    const rName = (r.name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+                    if (!rName) return false;
+                    return rName === aName || aName.includes(rName) || rName.includes(aName);
+                  });
+                  const pct = typeof ratio?.percentage === 'number' ? ratio.percentage : null;
+                  const isRep = my_talk_ratio && ratio?.name === my_talk_ratio.name;
+                  return (
+                    <tr key={a.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 500 }}>{a.display_name || a.email || '—'}</td>
+                      <td style={{ padding: '10px 14px', color: 'var(--slate-600)' }}>{a.email || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {a.is_conference_call_host && (
+                            <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8', fontWeight: 500 }}>Host</span>
+                          )}
+                          {a.attended !== false && (
+                            <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a', fontWeight: 500 }}>Attended</span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', verticalAlign: 'middle' }}>
+                        {pct != null ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                            <div style={{ width: 60, height: 6, background: 'var(--slate-200)', borderRadius: '99px', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  height: '100%',
+                                  width: `${Math.min(100, pct)}%`,
+                                  background: isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : 'var(--slate-400)',
+                                  borderRadius: '99px',
+                                }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--slate-600)', minWidth: 28 }}>{pct}%</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--slate-400)' }}>—</span>
                         )}
-                        {a.attended !== false && (
-                          <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a', fontWeight: 500 }}>Attended</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -383,45 +427,6 @@ export default function MeetingDetail() {
                 </li>
               ))}
             </ul>
-          </div>
-        </div>
-      )}
-
-      {/* Speaking time breakdown */}
-      {talkRatios.length > 0 && (
-        <div className="card section">
-          <div className="card-header">
-            <h2 className="card-title">Speaking time</h2>
-          </div>
-          <div className="card-body">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {talkRatios.map((r, i) => {
-                const pct = typeof r.percentage === 'number' ? r.percentage : 0;
-                const isRep = my_talk_ratio && r.name === my_talk_ratio.name;
-                return (
-                  <div key={i}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.875rem' }}>
-                      <span style={{ fontWeight: 500, color: 'var(--slate-700)' }}>
-                        {r.name || 'Unknown'}
-                        {r.isInternal && <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--slate-500)' }}>(internal)</span>}
-                        {isRep && <span style={{ marginLeft: '6px', fontSize: '0.72rem', padding: '1px 4px', borderRadius: '4px', background: 'var(--brand-light)', color: 'var(--brand)' }}>You</span>}
-                      </span>
-                      <span style={{ fontWeight: 600, color: 'var(--slate-600)' }}>{pct}%</span>
-                    </div>
-                    <div style={{ height: 8, background: 'var(--slate-200)', borderRadius: '99px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          height: '100%',
-                          width: `${Math.min(100, pct)}%`,
-                          background: isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : 'var(--slate-400)',
-                          borderRadius: '99px',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
       )}
