@@ -369,7 +369,8 @@ export default function MeetingDetail() {
                     if (!rName) return false;
                     return rName === aName || aName.includes(rName) || rName.includes(aName);
                   });
-                  const pct = typeof ratio?.percentage === 'number' ? ratio.percentage : null;
+                  const rawPct = typeof ratio?.percentage === 'number' ? ratio.percentage : null;
+                  const pct = rawPct != null ? Math.min(100, rawPct) : null;
                   const isRep = my_talk_ratio && ratio?.name === my_talk_ratio.name;
                   return (
                     <tr key={a.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
