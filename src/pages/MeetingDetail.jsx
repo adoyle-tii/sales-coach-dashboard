@@ -56,6 +56,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
       paddingBottom: '12px',
       marginBottom: '12px',
       borderBottom: '1px solid var(--slate-200)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
     }}>
       <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Meeting timeline
@@ -77,6 +78,8 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                 {segments.map((seg, i) => {
                   const leftPct = (seg.start / totalLen) * 100;
                   const widthPct = Math.max(0.5, (seg.len / totalLen) * 100);
+                  const gap = 0.15;
+                  const adjWidth = Math.max(0.5, widthPct - gap);
                   return (
                     <button
                       key={i}
@@ -86,7 +89,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                       style={{
                         position: 'absolute',
                         left: `${leftPct}%`,
-                        width: `${widthPct}%`,
+                        width: `${adjWidth}%`,
                         height: '100%',
                         background: fill,
                         border: 'none',
@@ -133,7 +136,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
   const scrollToTurn = useCallback((index) => {
     const el = turnRefs.current[index];
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, []);
 
@@ -161,7 +164,11 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
                 onSegmentClick={scrollToTurn}
               />
               {turns.map((t, i) => (
-                <div key={i} ref={(el) => { turnRefs.current[i] = el; }}>
+                <div
+                  key={i}
+                  ref={(el) => { turnRefs.current[i] = el; }}
+                  style={{ scrollMarginTop: '160px' }}
+                >
                   <TranscriptBubble
                     speaker={t.speaker}
                     text={t.text}
