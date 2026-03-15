@@ -103,7 +103,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                     style={{
                       position: 'absolute',
                       left: `${seg.leftPct}%`,
-                      width: `${Math.max(0.5, seg.widthPct)}%`,
+                      width: `${seg.widthPct}%`,
                       top: 0,
                       bottom: 0,
                       background: fill,
