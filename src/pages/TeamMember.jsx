@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import PdpChatPanel from '../components/PdpChatPanel';
 import SpiderChart, { ScoreBar } from '../components/SpiderChart';
 import CourseCompletionPanel from '../components/CourseCompletionPanel';
+import MeetingsTable from '../components/MeetingsTable';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
@@ -215,6 +216,9 @@ export default function TeamMember() {
           </div>
         )}
       </div>
+
+      {/* Meetings */}
+      <MeetingsTable userId={userId} basePath={`/team/${userId}`} />
 
       {/* PDP Chat Panel — owns the full plan view, edit, AI chat, mark complete, and past plans */}
       <div className="section">

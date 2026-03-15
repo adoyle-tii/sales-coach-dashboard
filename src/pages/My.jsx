@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useImpersonation } from '../context/ImpersonationContext';
 import SpiderChart, { ScoreBar } from '../components/SpiderChart';
 import CourseCompletionPanel from '../components/CourseCompletionPanel';
+import MeetingsTable from '../components/MeetingsTable';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
@@ -456,6 +457,9 @@ export default function My() {
           )}
         </div>
       )}
+
+      {/* My meetings */}
+      <MeetingsTable userId={dataUserId} basePath="/my" />
 
       {/* Core Curriculum / Course Completion */}
       <CourseCompletionPanel
