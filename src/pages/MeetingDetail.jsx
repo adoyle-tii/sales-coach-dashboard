@@ -44,18 +44,13 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
   }
 
   const norm = (s) => (s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
-  const gridCols = turnsWithLen.map((t) => `${Math.max(1, t.len)}fr`).join(' ');
 
   return (
     <div style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 10,
       background: 'white',
       paddingBottom: '12px',
       marginBottom: '12px',
       borderBottom: '1px solid var(--slate-200)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
     }}>
       <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--slate-500)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Meeting timeline
@@ -76,14 +71,14 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                 style={{
                   flex: 1,
                   height: 20,
-                  display: 'grid',
-                  gridTemplateColumns: gridCols,
+                  display: 'flex',
                   gap: '2px',
                   minWidth: 0,
                 }}
               >
                 {turnsWithLen.map((t, i) => {
                   const isThisSpeaker = (norm(t.speaker) || 'unknown') === segKey;
+                  const flexGrow = Math.max(1, t.len);
                   return (
                     <button
                       key={i}
@@ -91,8 +86,9 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                       onClick={() => isThisSpeaker && onSegmentClick(i)}
                       title={isThisSpeaker ? `Turn ${i + 1}: ${(t.text || '').slice(0, 50)}...` : ''}
                       style={{
+                        flex: `${flexGrow} 0 0`,
+                        minWidth: 2,
                         height: '100%',
-                        minWidth: 0,
                         background: isThisSpeaker ? fill : 'transparent',
                         border: 'none',
                         cursor: isThisSpeaker ? 'pointer' : 'default',
@@ -167,11 +163,7 @@ function TranscriptSection({ transcript, talkRatios, myTalkRatioName, transcript
                 onSegmentClick={scrollToTurn}
               />
               {turns.map((t, i) => (
-                <div
-                  key={i}
-                  ref={(el) => { turnRefs.current[i] = el; }}
-                  style={{ scrollMarginTop: '160px' }}
-                >
+                <div key={i} ref={(el) => { turnRefs.current[i] = el; }}>
                   <TranscriptBubble
                     speaker={t.speaker}
                     text={t.text}
