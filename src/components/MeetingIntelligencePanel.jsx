@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 // v5 — rep list drill-down on engagement panels
@@ -705,6 +706,138 @@ export function TeamMeetingIntelligenceSummary({ teamIntel }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Individual rep summary (My.jsx, TeamMember.jsx) ──────────────────────────
+
+export function RepMeetingIntelligenceSummary({ userId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setData(null); setLoading(true); setError(null);
+    if (!userId) { setLoading(false); return; }
+    (async () => {
+      try {
+        const { data: { session } } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+        const token = session?.access_token;
+        const res = await fetch(`${WORKER_URL}/hs/meeting-intelligence/rep/${encodeURIComponent(userId)}/summary`, {
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        setData(await res.json());
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [userId, token]);
+
+  if (loading) return (
+    <div className="card" style={{ marginBottom: '24px' }}>
+      <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', fontSize: '0.875rem' }}>
+        <div className="spinner" style={{ width: '16px', height: '16px' }} /> Loading meeting summary…
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="alert alert-error" style={{ marginBottom: '16px', fontSize: '0.8rem' }}>
+      Meeting summary unavailable: {error}
+    </div>
+  );
+
+  if (!data) return null;
+
+  const now = new Date();
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const thisMonthName = monthNames[now.getUTCMonth()];
+  const lastMonthName = monthNames[now.getUTCMonth() === 0 ? 11 : now.getUTCMonth() - 1];
+  const dayOfMonth = now.getUTCDate();
+  const thisPeriod = `${thisMonthName} 1–${dayOfMonth}`;
+  const lastPeriod = `${lastMonthName} 1–${dayOfMonth}`;
+
+  function DeltaBadge({ value, suffix = '' }) {
+    if (value == null) return null;
+    const up = value > 0, zero = value === 0;
+    return (
+      <span style={{
+        fontSize: '0.7rem', fontWeight: 700, padding: '1px 5px', borderRadius: '99px',
+        background: zero ? '#f1f5f9' : up ? '#dcfce7' : '#fee2e2',
+        color: zero ? '#94a3b8' : up ? '#16a34a' : '#dc2626',
+      }}>
+        {zero ? '–' : `${up ? '+' : ''}${typeof value === 'number' ? value.toFixed(value % 1 === 0 ? 0 : 1) : value}${suffix}`}
+      </span>
+    );
+  }
+
+  const recentAttended = (data.meetings_by_month || []).slice(-5);
+  const recentHosted = (data.meetings_hosted_by_month || []).slice(-5);
+  const recentTalk = (data.avg_talk_ratio_by_month || []).slice(-5);
+
+  const tiles = [
+    {
+      label: 'Meetings attended',
+      thisVal: data.mtd_attended_this_month != null ? String(data.mtd_attended_this_month) : '—',
+      lastVal: data.mtd_attended_last_month != null ? String(data.mtd_attended_last_month) : '—',
+      delta: data.mtd_attended_this_month != null && data.mtd_attended_last_month != null ? data.mtd_attended_this_month - data.mtd_attended_last_month : null,
+      suffix: '', color: '#1e293b',
+      spark: recentAttended, sparkKey: 'count', sparkColor: '#7c3aed',
+      labelFn: (d) => d.count != null ? String(d.count) : null,
+    },
+    {
+      label: 'Meetings hosted',
+      thisVal: data.mtd_hosted_this_month != null ? String(data.mtd_hosted_this_month) : '—',
+      lastVal: data.mtd_hosted_last_month != null ? String(data.mtd_hosted_last_month) : '—',
+      delta: data.mtd_hosted_this_month != null && data.mtd_hosted_last_month != null ? data.mtd_hosted_this_month - data.mtd_hosted_last_month : null,
+      suffix: '', color: '#1e293b',
+      spark: recentHosted, sparkKey: 'count', sparkColor: '#2563eb',
+      labelFn: (d) => d.count != null ? String(d.count) : null,
+    },
+    {
+      label: 'Avg internal talk ratio',
+      thisVal: data.mtd_talk_ratio_this_month != null ? `${data.mtd_talk_ratio_this_month}%` : '—',
+      lastVal: data.mtd_talk_ratio_last_month != null ? `${data.mtd_talk_ratio_last_month}%` : '—',
+      delta: data.mtd_talk_ratio_this_month != null && data.mtd_talk_ratio_last_month != null ? Math.round((data.mtd_talk_ratio_this_month - data.mtd_talk_ratio_last_month) * 10) / 10 : null,
+      suffix: '%', color: talkRatioColor(data.mtd_talk_ratio_this_month),
+      subLabel: 'Target: 40–60% · available after scraping',
+      spark: recentTalk, sparkKey: 'avg_internal_talk_pct', sparkColor: talkRatioColor(data.mtd_talk_ratio_this_month),
+      labelFn: null,
+    },
+  ];
+
+  return (
+    <div className="card" style={{ marginBottom: '24px' }}>
+      <div className="card-header">
+        <h2 className="card-title">Meeting Intelligence</h2>
+        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{thisPeriod} vs {lastPeriod}</span>
+      </div>
+      <div className="card-body">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          {tiles.map(({ label, thisVal, lastVal, delta, suffix, color, subLabel, spark, sparkKey, sparkColor, labelFn }) => (
+            <div key={label} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '3px', marginBottom: '6px' }}>
+                <div style={{ gridColumn: '1 / 5', textAlign: 'right', paddingRight: '2px' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 600, color: '#94a3b8', marginBottom: '1px', whiteSpace: 'nowrap' }}>{lastPeriod}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#cbd5e1', lineHeight: 1.1 }}>{lastVal}</div>
+                </div>
+                <div style={{ gridColumn: '5 / 6', textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#7c3aed', marginBottom: '1px', whiteSpace: 'nowrap' }}>{thisPeriod}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color, lineHeight: 1.1 }}>{thisVal}</div>
+                  <div style={{ marginTop: '3px', display: 'flex', justifyContent: 'flex-end' }}><DeltaBadge value={delta} suffix={suffix} /></div>
+                </div>
+              </div>
+              {subLabel && <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'right', marginBottom: '4px' }}>{subLabel}</div>}
+              <SparkBar data={spark} valueKey={sparkKey} color={sparkColor} maxOverride={sparkKey === 'pct' || sparkKey === 'avg_internal_talk_pct' ? 100 : undefined} labelFn={labelFn} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
