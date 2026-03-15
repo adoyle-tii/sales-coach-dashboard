@@ -34,6 +34,16 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
     return { ...t, index: i, len, start };
   });
   const totalLen = cum || 1;
+  const n = turnsWithPos.length;
+  const gapPct = n > 1 ? Math.min(0.25, 8 / (n - 1)) : 0;
+  const segmentSpace = 100 - (n - 1) * gapPct;
+  let cumLeft = 0;
+  const turnsWithLayout = turnsWithPos.map((t, i) => {
+    const widthPct = (t.len / totalLen) * segmentSpace;
+    const leftPct = cumLeft;
+    cumLeft += widthPct + gapPct;
+    return { ...t, leftPct, widthPct };
+  });
 
   const speakersOrdered = [];
   const seen = new Set();
@@ -66,7 +76,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
           const segKey = norm(speaker) || 'unknown';
           const isRep = myTalkRatioName && norm(speaker) === norm(myTalkRatioName);
           const fill = isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : isInternal ? '#7c3aed' : '#94a3b8';
-          const segments = turnsWithPos.filter((t) => (norm(t.speaker) || 'unknown') === segKey);
+          const segments = turnsWithLayout.filter((t) => (norm(t.speaker) || 'unknown') === segKey);
           return (
             <div key={speaker || 'unknown'} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
               <span style={{ flexShrink: 0, width: '100px', fontWeight: 500, color: 'var(--slate-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -84,33 +94,29 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                   overflow: 'hidden',
                 }}
               >
-                {segments.map((seg, i) => {
-                  const leftPct = (seg.start / totalLen) * 100;
-                  const widthPct = (seg.len / totalLen) * 100;
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => onSegmentClick(seg.index)}
-                      title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
-                      style={{
-                        position: 'absolute',
-                        left: `${leftPct}%`,
-                        width: `${widthPct}%`,
-                        top: 0,
-                        bottom: 0,
-                        background: fill,
-                        border: 'none',
-                        cursor: 'pointer',
-                        opacity: 0.9,
-                        transition: 'opacity 0.15s',
-                        borderRadius: '2px',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                    />
-                  );
-                })}
+                {segments.map((seg, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onSegmentClick(seg.index)}
+                    title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
+                    style={{
+                      position: 'absolute',
+                      left: `${seg.leftPct}%`,
+                      width: `${Math.max(0.5, seg.widthPct)}%`,
+                      top: 0,
+                      bottom: 0,
+                      background: fill,
+                      border: 'none',
+                      cursor: 'pointer',
+                      opacity: 0.9,
+                      transition: 'opacity 0.15s',
+                      borderRadius: '2px',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+                  />
+                ))}
               </div>
             </div>
           );
