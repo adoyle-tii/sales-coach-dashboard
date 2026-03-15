@@ -35,13 +35,15 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
   });
   const totalLen = cum || 1;
   const n = turnsWithPos.length;
-  const gapPct = n > 1 ? Math.min(0.25, 8 / (n - 1)) : 0;
+  const gapPct = n > 1 ? Math.min(0.3, 10 / (n - 1)) : 0;
   const segmentSpace = 100 - (n - 1) * gapPct;
   let cumLeft = 0;
+  const overlapBuffer = 0.04;
   const turnsWithLayout = turnsWithPos.map((t, i) => {
-    const widthPct = (t.len / totalLen) * segmentSpace;
+    const rawWidth = (t.len / totalLen) * segmentSpace;
+    const widthPct = Math.max(0.2, rawWidth - overlapBuffer);
     const leftPct = cumLeft;
-    cumLeft += widthPct + gapPct;
+    cumLeft += rawWidth + gapPct;
     return { ...t, leftPct, widthPct };
   });
 
