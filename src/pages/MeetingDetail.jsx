@@ -5,6 +5,61 @@ import { useImpersonation } from '../context/ImpersonationContext';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'https://sales-skills-assessment-engine.salesenablement.workers.dev';
 
+// Parse transcript lines in "Speaker: text" format; return [{ speaker, text }]
+function parseTranscriptLines(raw) {
+  if (!raw || typeof raw !== 'string') return [];
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const result = [];
+  for (const line of lines) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx > 0) {
+      result.push({ speaker: line.slice(0, colonIdx).trim(), text: line.slice(colonIdx + 1).trim() });
+    } else if (line) {
+      result.push({ speaker: '', text: line });
+    }
+  }
+  return result;
+}
+
+// Chat-style bubble for transcript (internal vs external)
+function TranscriptBubble({ speaker, text, isInternal }) {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: isInternal ? 'flex-start' : 'flex-end',
+      marginBottom: '8px',
+    }}>
+      {speaker && (
+        <span style={{
+          fontSize: '0.7rem',
+          fontWeight: 600,
+          color: 'var(--slate-500)',
+          marginBottom: '2px',
+          paddingLeft: isInternal ? '4px' : 0,
+          paddingRight: isInternal ? 0 : '4px',
+        }}>
+          {speaker} {isInternal ? '(internal)' : '(external)'}
+        </span>
+      )}
+      <div style={{
+        maxWidth: '78%',
+        padding: '10px 14px',
+        borderRadius: isInternal ? '4px 18px 18px 18px' : '18px 4px 18px 18px',
+        background: isInternal ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#f1f5f9',
+        color: isInternal ? 'white' : '#1e293b',
+        fontSize: '0.9rem',
+        lineHeight: '1.55',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+      }}>
+        {text}
+      </div>
+    </div>
+  );
+}
+
 export default function MeetingDetail() {
   const { meetingId, userId: memberUserId } = useParams();
   const { dataUserId } = useImpersonation();
@@ -65,6 +120,9 @@ export default function MeetingDetail() {
   const deliveryInsights = Array.isArray(my_attendee?.delivery_insights) ? my_attendee.delivery_insights : [];
   const transcript = meeting.transcript && String(meeting.transcript).trim();
 
+  // Only show attendees who attended (attended !== false; legacy rows may have null)
+  const attendedOnly = (attendees || []).filter((a) => a.attended !== false);
+
   const formatDate = (d) => {
     if (!d) return '—';
     try {
@@ -95,13 +153,13 @@ export default function MeetingDetail() {
         </div>
       </div>
 
-      {/* Attendees */}
+      {/* Attendees (only those who attended) */}
       <div className="card section">
         <div className="card-header">
           <h2 className="card-title">Attendees</h2>
         </div>
         <div className="card-body-tight">
-          {attendees.length === 0 ? (
+          {attendedOnly.length === 0 ? (
             <div className="empty-state" style={{ padding: '16px 0' }}>No attendees recorded.</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
@@ -113,7 +171,7 @@ export default function MeetingDetail() {
                 </tr>
               </thead>
               <tbody>
-                {attendees.map((a) => (
+                {attendedOnly.map((a) => (
                   <tr key={a.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                     <td style={{ padding: '10px 14px', fontWeight: 500 }}>{a.display_name || a.email || '—'}</td>
                     <td style={{ padding: '10px 14px', color: 'var(--slate-600)' }}>{a.email || '—'}</td>
@@ -232,7 +290,7 @@ export default function MeetingDetail() {
         </div>
       )}
 
-      {/* Transcript */}
+      {/* Transcript (chat format: internal vs external) */}
       {transcript && (
         <div className="card section">
           <button
@@ -247,10 +305,39 @@ export default function MeetingDetail() {
             </h2>
           </button>
           {transcriptOpen && (
-            <div className="card-body" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
-                {transcript}
-              </pre>
+            <div className="card-body" style={{ maxHeight: '500px', overflowY: 'auto', padding: '16px 20px' }}>
+              {(() => {
+                const turns = parseTranscriptLines(transcript);
+                const speakerToInternal = new Map();
+                for (const r of talkRatios) {
+                  const key = (r.name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+                  if (key) speakerToInternal.set(key, !!r.isInternal);
+                }
+                const isInternalSpeaker = (name) => {
+                  const key = (name || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+                  if (speakerToInternal.has(key)) return speakerToInternal.get(key);
+                  if (key) {
+                    for (const [k, v] of speakerToInternal) {
+                      if (k.includes(key) || key.includes(k)) return v;
+                    }
+                  }
+                  return false;
+                };
+                return turns.length > 0 ? (
+                  turns.map((t, i) => (
+                    <TranscriptBubble
+                      key={i}
+                      speaker={t.speaker}
+                      text={t.text}
+                      isInternal={isInternalSpeaker(t.speaker)}
+                    />
+                  ))
+                ) : (
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem', color: 'var(--slate-700)', lineHeight: 1.6, fontFamily: 'inherit' }}>
+                    {transcript}
+                  </pre>
+                );
+              })()}
             </div>
           )}
         </div>
