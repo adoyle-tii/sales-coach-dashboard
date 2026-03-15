@@ -21,18 +21,16 @@ function parseTranscriptLines(raw) {
   return result;
 }
 
-// Meeting scrubber: timeline bars per speaker, click segment to scroll to turn
+// Meeting scrubber: one column per turn (width = turn length), each row shows only that speaker's turns.
+// At any moment only the person speaking has a filled segment; others have gaps.
 function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentClick }) {
   if (!turns.length) return null;
 
-  const totalLen = turns.reduce((s, t) => s + (t.text?.length || 0), 0) || 1;
-  let cum = 0;
-  const turnsWithPos = turns.map((t, i) => {
-    const len = t.text?.length || 0;
-    const start = cum;
-    cum += len;
-    return { ...t, index: i, start, len };
-  });
+  const turnsWithLen = turns.map((t, i) => ({
+    ...t,
+    index: i,
+    len: t.text?.length || 0,
+  }));
 
   const speakersOrdered = [];
   const seen = new Set();
@@ -46,6 +44,7 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
   }
 
   const norm = (s) => (s || '').replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+  const gridCols = turnsWithLen.map((t) => `${Math.max(1, t.len)}fr`).join(' ');
 
   return (
     <div style={{
@@ -65,7 +64,6 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
         {speakersOrdered.map((speaker) => {
           const isInternal = speakerToInternal(speaker);
           const segKey = norm(speaker) || 'unknown';
-          const segments = turnsWithPos.filter((t) => (norm(t.speaker) || 'unknown') === segKey);
           const isRep = myTalkRatioName && norm(speaker) === norm(myTalkRatioName);
           const fill = isRep ? 'linear-gradient(90deg, var(--brand), #a855f7)' : isInternal ? '#7c3aed' : '#94a3b8';
           return (
@@ -74,31 +72,36 @@ function MeetingScrubber({ turns, speakerToInternal, myTalkRatioName, onSegmentC
                 {speaker || 'Unknown'}
                 {isRep && <span style={{ marginLeft: '4px', fontSize: '0.65rem', color: 'var(--brand)' }}>You</span>}
               </span>
-              <div style={{ flex: 1, height: 20, background: 'var(--slate-100)', borderRadius: '4px', overflow: 'hidden', display: 'flex', position: 'relative' }}>
-                {segments.map((seg, i) => {
-                  const leftPct = (seg.start / totalLen) * 100;
-                  const widthPct = Math.max(0.5, (seg.len / totalLen) * 100);
-                  const gap = 0.15;
-                  const adjWidth = Math.max(0.5, widthPct - gap);
+              <div
+                style={{
+                  flex: 1,
+                  height: 20,
+                  display: 'grid',
+                  gridTemplateColumns: gridCols,
+                  gap: '2px',
+                  minWidth: 0,
+                }}
+              >
+                {turnsWithLen.map((t, i) => {
+                  const isThisSpeaker = (norm(t.speaker) || 'unknown') === segKey;
                   return (
                     <button
                       key={i}
                       type="button"
-                      onClick={() => onSegmentClick(seg.index)}
-                      title={`Turn ${seg.index + 1}: ${(seg.text || '').slice(0, 50)}...`}
+                      onClick={() => isThisSpeaker && onSegmentClick(i)}
+                      title={isThisSpeaker ? `Turn ${i + 1}: ${(t.text || '').slice(0, 50)}...` : ''}
                       style={{
-                        position: 'absolute',
-                        left: `${leftPct}%`,
-                        width: `${adjWidth}%`,
                         height: '100%',
-                        background: fill,
+                        minWidth: 0,
+                        background: isThisSpeaker ? fill : 'transparent',
                         border: 'none',
-                        cursor: 'pointer',
-                        opacity: 0.85,
+                        cursor: isThisSpeaker ? 'pointer' : 'default',
+                        opacity: isThisSpeaker ? 0.9 : 0,
                         transition: 'opacity 0.15s',
+                        borderRadius: '2px',
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.85'; }}
+                      onMouseEnter={(e) => { if (isThisSpeaker) e.currentTarget.style.opacity = '1'; }}
+                      onMouseLeave={(e) => { if (isThisSpeaker) e.currentTarget.style.opacity = '0.9'; }}
                     />
                   );
                 })}
